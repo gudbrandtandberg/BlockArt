@@ -3,6 +3,10 @@
 A trivial application to illustrate how the blockartlib library can be
 used from an application in project 1 for UBC CS 416 2017W2.
 
+From spec: 
+"an application that uses blockartlib and produces an html file as output that contains
+ an svg canvas that is the result of the application's distributed activity"
+
 Usage:
 go run art-app.go
 */
@@ -11,11 +15,13 @@ package main
 
 // Expects blockartlib.go to be in the ./blockartlib/ dir, relative to
 // this art-app.go file
-import "./blockartlib"
+import (
+	"./blockartlib"
 
-import "fmt"
-import "os"
-import "crypto/ecdsa"
+	"fmt"
+	"os"
+	"crypto/ecdsa"
+)
 
 func main() {
 	minerAddr := "127.0.0.1:8080"
