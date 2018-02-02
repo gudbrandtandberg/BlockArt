@@ -1,0 +1,75 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    
+    <title>BlockArt Drawing Server</title>
+    <style type="text/css"> 
+        h1 {
+            color:  magenta
+            
+        }
+        body {
+            width: 600px;
+            margin: 0 auto;
+        }
+        #input {
+            width: 300px;
+        }
+    </style>
+
+    <script type="text/javascript">
+        window.onload = function(){
+            var exampleSocket = new WebSocket("ws://127.0.0.1:8080/commandserver")
+            exampleSocket.onmessage = function (event) {
+                var command = JSON.parse(event.data)
+                console.log(command)
+                drawCommand(command)
+            }
+        }
+
+        function drawCommand(command) {
+            d = command.SVGString
+            var canvas = document.getElementById('myCanvas');
+            var ctx = canvas.getContext('2d');
+            var p = new Path2D(d);
+            ctx.fillStyle = command.Fill
+            ctx.strokestyle = command.Stroke
+            ctx.stroke(p);
+            ctx.fill(p)
+            document.getElementById("text").innerHTML = d;
+        }
+
+        // fetch('http://127.0.0.1:8080/commandserver').then(function(response) {
+        //     response.text().then(function(data) {
+        //         console.log(data)
+        //     })
+        // })}
+    </script>
+</head>
+
+<body>
+    <h1>{{.PageTitle}}</h1>
+
+    <p>Enter a 'd' SVG command below:</p>
+    d: <input type="text" id="input" value="">
+    <button onclick="drawInput()">Draw</button>
+    <p></p>
+    </br>
+    <canvas id="myCanvas" width="512" height="512" style="border:2px solid #d3d3d3;">.</canvas>
+    <p id="text"></p>
+    
+    <script type="text/javascript">
+        function drawInput() {
+            var x = document.getElementById("input").value;
+            var canvas = document.getElementById('myCanvas');
+            var ctx = canvas.getContext('2d');
+            var p = new Path2D(x);
+            ctx.stroke(p);
+            document.getElementById("text").innerHTML = x;
+        }
+    </script>
+
+</body>
+</html>
