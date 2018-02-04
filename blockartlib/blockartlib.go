@@ -1,8 +1,6 @@
 /*
-
 This package specifies the application's interface to the the BlockArt
 library (blockartlib) to be used in project 1 of UBC CS 416 2017W2.
-
 */
 
 package blockartlib

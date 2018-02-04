@@ -18,20 +18,38 @@ import (
 	"github.com/gorilla/websocket"
 )
 
-// A DrawCommand contains fields for drawing SVG path elements
-type DrawCommand struct {
+// A Path contains fields for drawing SVG path elements
+type Path struct {
 	SVGString string
 	Fill      string
 	Stroke    string
 }
 
-var blackSquare = DrawCommand{"M 10 10 h 100 v 100 h -100 v -100", "black", "black"}
-var yellowSquare = DrawCommand{"M 110 110 h 100 v 100 h -100 v -100", "yellow", "black"}
-var redSquare = DrawCommand{"M 210 10 h 100 v 100 h -100 v -100", "red", "black"}
-var blueSquare = DrawCommand{"M 10 210 h 100 v 100 h -100 v -100", "blue", "black"}
-var greenSquare = DrawCommand{"M 210 210 h 100 v 100 h -100 v -100", "green", "black"}
+type Circle struct {
+	cx, cy, r float64
+	Fill      string
+	Stroke    string
+}
 
-var commandQueue = []DrawCommand{blackSquare, yellowSquare, redSquare, blueSquare, greenSquare}
+type Shape interface {
+	Area() float64
+}
+
+func (c Circle) Area() float64 {
+	return 0.0
+}
+
+func (p Path) Area() float64 {
+	return 0.0
+}
+
+var blackSquare = Path{"M 10 10 h 100 v 100 h -100 v -100", "black", "black"}
+var yellowSquare = Path{"M 110 110 h 100 v 100 h -100 v -100", "yellow", "black"}
+var redSquare = Path{"M 210 10 h 100 v 100 h -100 v -100", "red", "black"}
+var blueSquare = Path{"M 10 210 h 100 v 100 h -100 v -100", "blue", "black"}
+var greenSquare = Path{"M 210 210 h 100 v 100 h -100 v -100", "green", "black"}
+
+var commandQueue = []Path{blackSquare, yellowSquare, redSquare, blueSquare, greenSquare}
 
 const (
 	delayMean = 4.0
@@ -44,7 +62,6 @@ type cvsData struct {
 
 func serve(w http.ResponseWriter, req *http.Request) {
 	w.Header().Set("Access-Control-Allow-Origin", "*")
-	//d := req.URL.Query().Get("d")
 	data := cvsData{PageTitle: "BlockArt Drawing Server"}
 	tmpl, err := template.ParseFiles("html/index.html")
 	tmpl.Execute(w, data)
@@ -55,7 +72,7 @@ func serve(w http.ResponseWriter, req *http.Request) {
 
 var upgrader = websocket.Upgrader{CheckOrigin: func(r *http.Request) bool { return true }}
 
-func serveCommand(w http.ResponseWriter, r *http.Request) {
+func serveNewShape(w http.ResponseWriter, r *http.Request) {
 	c, err := upgrader.Upgrade(w, r, nil)
 	if err != nil {
 		log.Print("upgrade:", err)
@@ -84,7 +101,7 @@ func serveCommand(w http.ResponseWriter, r *http.Request) {
 // over a websocket connection
 func main() {
 	http.Handle("/draw", http.HandlerFunc(serve))
-	http.Handle("/commandserver", http.HandlerFunc(serveCommand))
+	http.Handle("/commandserver", http.HandlerFunc(serveNewShape))
 	fmt.Println("Starting server...")
 	log.Fatal(http.ListenAndServe(":8080", nil))
 }

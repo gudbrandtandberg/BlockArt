@@ -1,3 +1,9 @@
+/*
+svg-parser.go is part of the blockartlib package and contains functions and
+datastructures for dealing with parsing SVG shapes and computing area and
+intersection of parsed shapes (TO BE INCLUDED IN blockartlib.go)
+*/
+
 package blockartlib
 
 import (
@@ -11,7 +17,8 @@ import (
 // EPSILON is the threshold used for checking if a float is zero
 const EPSILON = 10E-6
 
-var commands = map[string]int{"M": 2, "m": 2, "L": 2, "l": 2, "H": 1, "h": 1, "V": 1, "v": 1, "z": 0, "Z": 0}
+var commands = map[string]int{"M": 2, "m": 2, "L": 2, "l": 2,
+						"H": 1, "h": 1, "V": 1, "v": 1, "z": 0, "Z": 0}
 var moveToCmds = []string{"M", "m", "Z", "z"} //TODO: Z/z should not be "moveTo"..
 var lineToCmds = []string{"L", "l", "H", "h", "V", "v"}
 
