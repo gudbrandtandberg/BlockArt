@@ -8,37 +8,52 @@ import (
 	"strings"
 )
 
+// EPSILON is the threshold used for checking if a float is zero
 const EPSILON = 10E-6
 
 var commands = map[string]int{"M": 2, "m": 2, "L": 2, "l": 2, "H": 1, "h": 1, "V": 1, "v": 1, "z": 0, "Z": 0}
-var moveToCmds = []string{"M", "m", "Z", "z"}
+var moveToCmds = []string{"M", "m", "Z", "z"} //TODO: Z/z should not be "moveTo"..
 var lineToCmds = []string{"L", "l", "H", "h", "V", "v"}
 
+// A Point2d represents a point in a 2D Cartesian coordinate system
 type Point2d struct {
 	x, y float64
 }
 
+// String is used when printing points
 func (p Point2d) String() string {
 	return "(" + strconv.FormatFloat(p.x, 'f', -1, 64) +
 		", " + strconv.FormatFloat(p.y, 'f', -1, 64) + ")"
 }
 
+// Minus returns the difference of two points
+func (p Point2d) Minus(other Point2d) Point2d {
+	return Point2d{p.x - other.x, p.y - other.y}
+}
+
+// A Line2d represents a line segment from points a to b
 type Line2d struct {
 	a, b Point2d
 }
 
+// A Component is a ordered sequence of points
 type Component []Point2d
 
+// A Components object is a set of disjoint components
 type Components []Component
 
+// An SVGParser parses SVG shape commands into point-based datastructures
+// (need not be a struct as of now, but might be useful later..)
 type SVGParser struct {
 }
 
+// NewSVGParser is a SVGParser constructor
 func NewSVGParser() *SVGParser {
 	parser := SVGParser{}
 	return &parser
 }
 
+// Parse parses an SVG string and returns a list of components
 func (p *SVGParser) Parse(svgString string) (Components, error) {
 	var reader = strings.NewReader(svgString)
 	var arg1, arg2 float64
@@ -52,7 +67,7 @@ func (p *SVGParser) Parse(svgString string) (Components, error) {
 		}
 
 		if contains(moveToCmds, cmd) && isClosedPath(component) {
-			return components, errors.New("Cannot have multiple closed components in same path..")
+			return components, errors.New("cannot have multiple closed components in same path")
 		}
 
 		if contains(moveToCmds, cmd) && len(component) != 0 {
@@ -73,11 +88,10 @@ func (p *SVGParser) Parse(svgString string) (Components, error) {
 		switch numArgs {
 		case 0: // cmd is z or Z
 			if len(components) > 1 {
-				return components, errors.New("Cannot have multiple closed components in same path!!")
+				return components, errors.New("cannot have multiple closed components in same path")
 			}
 			if len(component) < 3 {
-				fmt.Println(len(component))
-				return components, errors.New("Cannot close path with fewer than three points")
+				return components, errors.New("cannot close path with fewer than three points")
 			}
 			if len(component) != 0 {
 				component = append(component, component[0])
@@ -123,17 +137,6 @@ func (p *SVGParser) Parse(svgString string) (Components, error) {
 	return components, nil
 }
 
-func euclidDist(u, v Point2d) float64 {
-	return math.Pow(u.x-v.x, 2) + math.Pow(u.y-v.y, 2)
-}
-
-func isClosedPath(path Component) bool {
-	if len(path) < 3 {
-		return false
-	}
-	return euclidDist(path[len(path)-1], path[0]) < EPSILON
-}
-
 func getCommand(reader *strings.Reader) (string, error) {
 	var cmd string
 	_, err := fmt.Fscanf(reader, "%s", &cmd)
@@ -175,7 +178,10 @@ func isCommand(cmd string) bool {
 	return exists
 }
 
-func shapeArea(vertices Component) float64 {
+// ShapeArea computes the area of a closed component.
+// Works for arbitrary (non-convex, non-self-intersecting) shapes,
+// provided 'vertices' describes an oriented, closed path.
+func ShapeArea(vertices Component) float64 {
 	area := 0.0
 	n := len(vertices)
 	j := n - 1 // The last vertex is the 'previous' one to the first
@@ -186,7 +192,9 @@ func shapeArea(vertices Component) float64 {
 	return math.Abs(area / 2)
 }
 
-func pathArea(components Components) float64 {
+// LineArea computes the sum of the perimeters of each of the components.
+// Works for any set of components
+func LineArea(components Components) float64 {
 	area := 0.0
 	for _, line := range components.lines() {
 		area += line.length()
@@ -212,38 +220,18 @@ func (l Line2d) length() float64 {
 	return math.Sqrt(math.Pow(l.b.x-l.a.x, 2) + math.Pow(l.b.y-l.a.y, 2))
 }
 
-func intersects(shape1, shape2 Components) bool {
-
+// Intersects is true if the two shapes described by the arguments intersect
+func Intersects(shape1, shape2 Components) bool {
 	// !?!??
-	return linesIntersect(shape1, shape2)
-
+	return openIntersects(shape1, shape2)
 }
 
-// linesIntersect is true if any of the lines in the first shape
-// intersect with any of the lines in the second
-func linesIntersect(shape1, shape2 Components) bool {
+// openIntersects is true if any of the lines in the first shape
+// intersect with any of the lines in the second shape
+func openIntersects(shape1, shape2 Components) bool {
 	for _, line1 := range shape1.lines() {
-	Inner:
 		for _, line2 := range shape2.lines() {
-			a := line1.a
-			b := line1.b
-			c := line2.a
-			d := line2.b
-			a11 := b.x - a.x
-			a12 := c.x - d.x
-			a21 := b.y - a.y
-			a22 := c.y - d.y
-			b1 := c.x - a.x
-			b2 := c.y - a.x
-			det := a11*a22 - a21*a12
-			if math.Abs(det) < EPSILON {
-				continue Inner
-			}
-			det1 := b1*a22 - b2*a12
-			det2 := a11*b2 - a21*b1
-			s := det1 / det
-			t := det2 / det
-			if 0 <= s && s <= 1.0 && 0 <= t && t <= 1.0 {
+			if linesIntersect(line1, line2) {
 				return true
 			}
 		}
@@ -251,8 +239,75 @@ func linesIntersect(shape1, shape2 Components) bool {
 	return false
 }
 
-func isOpen(c Components) bool {
-	return !isClosed(c)
+// linesIntersect is true if line1 intersects with line2
+// Computes the intersection of line1 = a->b and line2 = c->d by
+// using the parameterizations
+// 		l1(s) = a + (b-a)*s, s in [0, 1]
+//		l2(t) = c + (d-c)*t, t in [0, 1]
+// and solving the linear system
+// 		[(b-a) (c-d)][s t]^T = (c-a)
+// to determine where the lines intersect,
+// and check if both s and t indeed lie in [0,1]
+func linesIntersect(line1, line2 Line2d) bool {
+	A1 := line1.b.Minus(line1.a)
+	A2 := line2.a.Minus(line2.b)
+	rhs := line2.a.Minus(line1.a)
+	det := A1.x*A2.y - A1.y*A2.x
+	if math.Abs(det) < EPSILON {
+		if line1.contains(line2.a) || line1.contains(line2.b) || line2.contains(line1.a) {
+			return true
+		}
+	}
+	det1 := rhs.x*A2.y - rhs.y*A2.x
+	det2 := A1.x*rhs.y - A1.y*rhs.x
+	s := det1 / det
+	t := det2 / det
+	if 0 <= s && s <= 1.0 && 0 <= t && t <= 1.0 {
+		return true
+	}
+	return false
+}
+
+// contains returns true if the point p lies on the line segment l.
+// It is asssumed that det(l.a->p, l.a->l.b) == 0.
+func (l Line2d) contains(p Point2d) bool {
+	a := l.a
+	b := l.b
+	s := 0.0
+	if math.Abs(b.x-a.x) < EPSILON { //line is vertical
+		if !(math.Abs(p.x-a.x) < EPSILON) { //point does not have same x-coord as line
+			return false
+		}
+		s = p.y - a.y/b.y - a.y
+	} else if math.Abs(b.y-a.y) < EPSILON { //line is horizontal
+		if !(math.Abs(p.y-a.y) < EPSILON) { //point does not have same y-coord as line
+			return false
+		}
+		s = p.x - a.x/b.x - a.x
+	} else {
+		s1 := p.x - a.x/b.x - a.x
+		s2 := p.y - a.y/b.y - a.y
+		if !(math.Abs(s1-s2) < EPSILON) {
+			fmt.Println("s1 and s2 differ. Inputs are not parallel")
+			return false
+		}
+		s = s1
+	}
+	if 0 <= s && s <= 1.0 {
+		return true
+	}
+	return false
+}
+
+func euclidDist(u, v Point2d) float64 {
+	return math.Pow(u.x-v.x, 2) + math.Pow(u.y-v.y, 2)
+}
+
+func isClosedPath(path Component) bool {
+	if len(path) < 3 {
+		return false
+	}
+	return euclidDist(path[len(path)-1], path[0]) < EPSILON
 }
 
 func isClosed(c Components) bool {
@@ -265,16 +320,6 @@ func isClosed(c Components) bool {
 	return false
 }
 
-var examples = map[string]string{
-	"a":     "M 2 1 h 1 v 1 h 1 v 1 h -1 v 1 h -1 v -1 h -1 v -1 h 1 z",
-	"b":     "M 10 10 l 100 45 H 30 z",
-	"c":     "M 37 17 v 15 H 14 V 17 z",
-	"d":     "M 0 0 L 2 0 V 1 l 1 1 l -1 1 l -2 -2 z",
-	"diag1": "M 1 1 L 3 3",
-	"diag2": "M 1 3 L 3 1",
-	"diag3": "M 3 2 L 4 3",
-	"cross": "M 1 1 L 3 3 M 1 3 L 3 1",
-	"sq2":   "M 2 2 h 2 v 2 h -2 z",
-	"sq1":   "M 1 1 h 2 v 2 h -2 z",
-	"h":     "h 1",
+func isOpen(c Components) bool {
+	return !isClosed(c)
 }
