@@ -1,10 +1,9 @@
-package main
+package blockartlib
 
 import (
 	"errors"
 	"fmt"
 	"math"
-	"os"
 	"strconv"
 	"strings"
 )
@@ -33,12 +32,10 @@ type Component []Point2d
 type Components []Component
 
 type SVGParser struct {
-	components Components
 }
 
 func NewSVGParser() *SVGParser {
 	parser := SVGParser{}
-	parser.components = make(Components, 0)
 	return &parser
 }
 
@@ -178,14 +175,12 @@ func isCommand(cmd string) bool {
 	return exists
 }
 
-func shapeArea(component Component) float64 {
-
+func shapeArea(vertices Component) float64 {
 	area := 0.0
-	numcomponent := len(component)
-	j := numcomponent - 1 // The last vertex is the 'previous' one to the first
-
-	for i := 0; i < numcomponent; i++ {
-		area += (component[j].x + component[i].x) * (component[j].y - component[i].y)
+	n := len(vertices)
+	j := n - 1 // The last vertex is the 'previous' one to the first
+	for i := 0; i < n; i++ {
+		area += (vertices[j].x + vertices[i].x) * (vertices[j].y - vertices[i].y)
 		j = i
 	}
 	return math.Abs(area / 2)
@@ -220,11 +215,13 @@ func (l Line2d) length() float64 {
 func intersects(shape1, shape2 Components) bool {
 
 	// !?!??
-	return openIntersects(shape1, shape2)
+	return linesIntersect(shape1, shape2)
 
 }
 
-func openIntersects(shape1, shape2 Components) bool {
+// linesIntersect is true if any of the lines in the first shape
+// intersect with any of the lines in the second
+func linesIntersect(shape1, shape2 Components) bool {
 	for _, line1 := range shape1.lines() {
 	Inner:
 		for _, line2 := range shape2.lines() {
@@ -280,26 +277,4 @@ var examples = map[string]string{
 	"sq2":   "M 2 2 h 2 v 2 h -2 z",
 	"sq1":   "M 1 1 h 2 v 2 h -2 z",
 	"h":     "h 1",
-}
-
-func main() {
-	var svgString string
-	if len(os.Args) > 1 {
-		svgString = os.Args[1]
-	} else {
-		svgString = examples["a"]
-	}
-	_ = svgString
-
-	parser := NewSVGParser()
-	components, _ := parser.Parse(examples["sq1"])
-	other, _ := parser.Parse(examples["sq2"])
-
-	fmt.Println(components)
-	fmt.Println(other)
-
-	//fmt.Println(shapeArea(components[0]))
-	fmt.Println(pathArea(components))
-	fmt.Println(shapeArea(components[0]))
-	fmt.Println(intersects(components, other))
 }

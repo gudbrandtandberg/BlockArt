@@ -3,7 +3,7 @@
 A trivial application to illustrate how the blockartlib library can be
 used from an application in project 1 for UBC CS 416 2017W2.
 
-From spec: 
+From spec:
 "an application that uses blockartlib and produces an html file as output that contains
  an svg canvas that is the result of the application's distributed activity"
 
@@ -16,24 +16,29 @@ package main
 // Expects blockartlib.go to be in the ./blockartlib/ dir, relative to
 // this art-app.go file
 import (
-	"./blockartlib"
-
+	"crypto/ecdsa"
+	"crypto/elliptic"
+	"crypto/rand"
 	"fmt"
 	"os"
-	"crypto/ecdsa"
+
+	"./blockartlib"
 )
 
 func main() {
 	minerAddr := "127.0.0.1:8080"
-	privKey := // TODO: use crypto/ecdsa to read pub/priv keys from a file argument.
+	curve := elliptic.P224()
+	privKey, err := ecdsa.GenerateKey(curve, rand.Reader)
+
+	parser := blockartlib.NewSVGParser()
 
 	// Open a canvas.
-	canvas, settings, err := blockartlib.OpenCanvas(minerAddr, privKey)
+	canvas, settings, err := blockartlib.OpenCanvas(minerAddr, *privKey)
 	if checkError(err) != nil {
 		return
 	}
 
-    validateNum := 2
+	validateNum := uint8(2)
 
 	// Add a line.
 	shapeHash, blockHash, ink, err := canvas.AddShape(validateNum, blockartlib.PATH, "M 0 0 L 0 5", "transparent", "red")
