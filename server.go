@@ -127,8 +127,8 @@ func readConfigOrDie(path string) {
 
 // These variables control whether we should be working with the webserver
 const (
-	BROADCAST = true
-	GENERATE  = true
+	BROADCAST = false
+	GENERATE  = false
 )
 
 // Parses args, setups up RPC server.
