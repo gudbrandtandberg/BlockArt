@@ -68,6 +68,14 @@ type CircleShape struct {
 	stroke    string
 }
 
+func (c CircleShape) center() Point2d {
+	return Point2d{c.cx, c.cy}
+}
+
+func (c CircleShape) radius() float64 {
+	return c.r
+}
+
 // Area returns the area of a path element
 func (p PathShape) Area() float64 {
 	if p.fill != "transparent" {
@@ -302,6 +310,13 @@ func (c Components) lines() (lines []Line2d) {
 	return lines
 }
 
+func (c Components) points() (points []Point2d) {
+	for _, comp := range c {
+		points = append(points, comp...)
+	}
+	return points
+}
+
 func (l Line2d) length() float64 {
 	return math.Sqrt(math.Pow(l.b.x-l.a.x, 2) + math.Pow(l.b.y-l.a.y, 2))
 }
@@ -315,18 +330,57 @@ func IsOutOfBounds(shape Shape, w, h float64) bool {
 // Intersects is true if the two shapes described by the arguments intersect
 func Intersects(shape1, shape2 Shape) bool {
 
-	// Should handle the following intersections:
-	// - OpenPath / OpenPath
-	// - ClosedPath / OpenPath
-	// - Circle / Path
+	// - Path / Path
+	p1, isPath1 := shape1.(PathShape)
+	p2, isPath2 := shape2.(PathShape)
+	if isPath1 && isPath2 {
+		return openIntersects(p1.components, p2.components)
+	}
+
 	// - Circle / Circle
+	c1, isCircle1 := shape1.(CircleShape)
+	c2, isCircle2 := shape2.(CircleShape)
+	if isCircle1 && isCircle2 {
+		return circlesIntersect(c1, c2)
+	}
+
+	// - Circle / Path
+	if isPath1 && isCircle2 {
+		return pathIntersectsCircle(p1, c2)
+	}
+	if isCircle1 && isPath2 {
+		return pathIntersectsCircle(p2, c1)
+	}
 
 	return false
 }
 
+// A path shape intersects a circle shape if and only if at least one of
+// the points along the path is inside the circle
+func pathIntersectsCircle(path PathShape, circle CircleShape) bool {
+	for _, point := range path.components.points() {
+		if circleContainsPoint(circle, point) {
+			return true
+		}
+	}
+	return false
+}
+
+func circleContainsPoint(circle CircleShape, point Point2d) bool {
+	return euclidDist(point, circle.center()) <= circle.radius()
+}
+
+func circlesIntersect(c1, c2 CircleShape) bool {
+	return euclidDist(c1.center(), c2.center()) <= c1.radius()+c2.radius()
+}
+
 // openIntersects is true if any of the lines in the first shape
 // intersect with any of the lines in the second shape
+// - OpenPath / OpenPath
+// - ClosedPath / OpenPath
+// - ClosedPath / ClosedPath      <--- should be treated differently
 func openIntersects(shape1, shape2 Components) bool {
+
 	for _, line1 := range shape1.lines() {
 		for _, line2 := range shape2.lines() {
 			if linesIntersect(line1, line2) {
@@ -398,7 +452,7 @@ func (l Line2d) contains(p Point2d) bool {
 }
 
 func euclidDist(u, v Point2d) float64 {
-	return math.Pow(u.x-v.x, 2) + math.Pow(u.y-v.y, 2)
+	return math.Sqrt(math.Pow(u.x-v.x, 2) + math.Pow(u.y-v.y, 2))
 }
 
 func isClosedPath(path Component) bool {

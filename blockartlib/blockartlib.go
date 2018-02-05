@@ -177,7 +177,6 @@ type BACanvas struct {
 func (c BACanvas) AddShape(validateNum uint8, shapeType ShapeType, shapeSvgString string, fill string, stroke string) (shapeHash string, blockHash string, inkRemaining uint32, err error) {
 
 	parser := NewSVGParser()
-
 	shape, err := parser.Parse(shapeType, shapeSvgString, fill, stroke)
 
 	if err != nil {

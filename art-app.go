@@ -38,6 +38,10 @@ var examples = map[string]string{
 }
 
 func main() {
+
+	testParser()
+	return
+
 	minerAddr := "127.0.0.1:8080"
 	curve := elliptic.P224()
 	privKey, err := ecdsa.GenerateKey(curve, rand.Reader)
@@ -108,4 +112,20 @@ func checkError(err error) error {
 		return err
 	}
 	return nil
+}
+
+func testParser() {
+	parser := blockartlib.NewSVGParser()
+
+	shape1, _ := parser.Parse(blockartlib.PATH, examples["diag1"], "transparent", "black")
+	shape2, _ := parser.Parse(blockartlib.PATH, examples["diag2"], "transparent", "black")
+
+	fmt.Println(shape1)
+	fmt.Println(shape2)
+
+	intersects := blockartlib.Intersects(shape1, shape2)
+
+	fmt.Println("Shapes intersect:", intersects)
+
+	return
 }
