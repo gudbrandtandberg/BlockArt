@@ -38,11 +38,11 @@ func main() {
 	// privKey, err := ecdsa.GenerateKey(curve, rand.Reader)
 
 	parser := blockartlib.NewSVGParser()
-	c1, err := parser.Parse(examples["h1"])
+	c1, err := parser.Parse(examples["diag1"])
 	if checkError(err) != nil {
 		return
 	}
-	c2, err := parser.Parse(examples["h2"])
+	c2, err := parser.Parse(examples["diag2"])
 	if checkError(err) != nil {
 		return
 	}

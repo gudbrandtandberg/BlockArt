@@ -9,7 +9,7 @@ $ go run tester.go
   -b int
     	Heartbeat interval in ms (default 10)
   -i string
-    	RPC server ip:port
+    	RPC server ip:port (default 127.0.0.1:12345)
   -p int
     	start port (default 54320)
 
@@ -83,7 +83,7 @@ func main() {
 	gob.Register(&net.TCPAddr{})
 	gob.Register(&elliptic.CurveParams{})
 
-	ipPort := flag.String("i", "", "RPC server ip:port")
+	ipPort := flag.String("i", "127.0.0.1:12345", "RPC server ip:port")
 	startPort := flag.Int("p", 54320, "start port")
 	heartBeat := flag.Int("b", 10, "Heartbeat interval in ms")
 	flag.Parse()
