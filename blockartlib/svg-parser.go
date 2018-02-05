@@ -49,6 +49,41 @@ type Component []Point2d
 // A Components object is a set of disjoint components
 type Components []Component
 
+// A Shape represents a shape
+type Shape interface {
+	Area() float64
+}
+
+// A PathShape represents a path shape
+type PathShape struct {
+	components Components
+	fill       string
+	stroke     string
+}
+
+// A CircleShape represents a circle shape
+type CircleShape struct {
+	cx, cy, r float64
+	fill      string
+	stroke    string
+}
+
+// Area returns the area of a path element
+func (p PathShape) Area() float64 {
+	if p.fill != "transparent" {
+		return ShapeArea(p.components[0])
+	}
+	return LineArea(p.components)
+}
+
+// Area returns the area of a circle element
+func (c CircleShape) Area() float64 {
+	if c.fill != "transparent" {
+		return math.Pi * math.Pow(c.r, 2)
+	}
+	return 2 * math.Pi * c.r
+}
+
 // An SVGParser parses SVG shape commands into point-based datastructures
 // (need not be a struct as of now, but might be useful later..)
 type SVGParser struct {
@@ -61,7 +96,47 @@ func NewSVGParser() *SVGParser {
 }
 
 // Parse parses an SVG string and returns a list of components
-func (p *SVGParser) Parse(svgString string) (Components, error) {
+// Can return the following errors
+// - InvalidShapeSvgStringError
+// - ShapeSvgStringTooLongError
+func (p *SVGParser) Parse(shapeType ShapeType, svgString, fill, stroke string) (Shape, error) {
+
+	if len(svgString) > 128 {
+		return nil, ShapeSvgStringTooLongError(svgString)
+	}
+
+	if shapeType == CIRCLE {
+		return parseCircle(svgString, fill, stroke)
+	} else if shapeType == PATH {
+		return parseShape(svgString, fill, stroke)
+	}
+
+	return nil, errors.New("Unknown ShapeType")
+}
+
+// Can return the following errors
+// - InvalidShapeSvgStringError
+func parseCircle(svgString, fill, stroke string) (Shape, error) {
+	var reader = strings.NewReader(svgString)
+	buffer := make([]byte, 129)
+	n, _ := reader.Read(buffer)
+	cmd := string(buffer[:n])
+	parts := strings.Split(cmd, ",")
+	if len(parts) != 3 {
+		return nil, InvalidShapeSvgStringError(svgString)
+	}
+	cx, err := strconv.ParseFloat(strings.Trim(parts[0], " "), 64)
+	cy, err := strconv.ParseFloat(strings.Trim(parts[1], " "), 64)
+	r, err := strconv.ParseFloat(strings.Trim(parts[2], " "), 64)
+	if err != nil {
+		return nil, InvalidShapeSvgStringError(svgString)
+	}
+	return CircleShape{cx, cy, r, fill, stroke}, nil
+}
+
+// Can return the following errors
+// - InvalidShapeSvgStringError
+func parseShape(svgString, fill, stroke string) (Shape, error) {
 	var reader = strings.NewReader(svgString)
 	var arg1, arg2 float64
 	var lastPoint Point2d // defaults to the origin
@@ -70,11 +145,12 @@ func (p *SVGParser) Parse(svgString string) (Components, error) {
 
 	for cmd, err := getCommand(reader); err == nil; cmd, err = getCommand(reader) {
 		if !isCommand(cmd) {
-			return nil, errors.New("The command " + cmd + " is not a valid SVG command")
+			return nil, InvalidShapeSvgStringError(svgString)
 		}
 
 		if contains(moveToCmds, cmd) && isClosedPath(component) {
-			return components, errors.New("cannot have multiple closed components in same path")
+			fmt.Println("cannot have multiple closed components in same path")
+			return nil, InvalidShapeSvgStringError(svgString)
 		}
 
 		if contains(moveToCmds, cmd) && len(component) != 0 {
@@ -95,10 +171,12 @@ func (p *SVGParser) Parse(svgString string) (Components, error) {
 		switch numArgs {
 		case 0: // cmd is z or Z
 			if len(components) > 1 {
-				return components, errors.New("cannot have multiple closed components in same path")
+				fmt.Println("cannot have multiple closed components in same path")
+				return nil, InvalidShapeSvgStringError(svgString)
 			}
 			if len(component) < 3 {
-				return components, errors.New("cannot close path with fewer than three points")
+				fmt.Println("cannot close path with fewer than three points")
+				return nil, InvalidShapeSvgStringError(svgString)
 			}
 			if len(component) != 0 {
 				component = append(component, component[0])
@@ -141,7 +219,8 @@ func (p *SVGParser) Parse(svgString string) (Components, error) {
 		}
 	}
 	components = append(components, component)
-	return components, nil
+
+	return PathShape{components, fill, stroke}, nil
 }
 
 func getCommand(reader *strings.Reader) (string, error) {
@@ -227,10 +306,22 @@ func (l Line2d) length() float64 {
 	return math.Sqrt(math.Pow(l.b.x-l.a.x, 2) + math.Pow(l.b.y-l.a.y, 2))
 }
 
+// IsOutOfBounds is true if the 'shape' overflows the canvas,
+// as described by 'w' and 'h'
+func IsOutOfBounds(shape Shape, w, h float64) bool {
+	return false
+}
+
 // Intersects is true if the two shapes described by the arguments intersect
-func Intersects(shape1, shape2 Components) bool {
-	// !?!??
-	return openIntersects(shape1, shape2)
+func Intersects(shape1, shape2 Shape) bool {
+
+	// Should handle the following intersections:
+	// - OpenPath / OpenPath
+	// - ClosedPath / OpenPath
+	// - Circle / Path
+	// - Circle / Circle
+
+	return false
 }
 
 // openIntersects is true if any of the lines in the first shape
@@ -329,4 +420,28 @@ func isClosed(c Components) bool {
 
 func isOpen(c Components) bool {
 	return !isClosed(c)
+}
+
+func (p PathShape) String() string {
+	compString := fmt.Sprintf("%s", p.components)
+	s := ""
+	s += "<Path>\n"
+	s += "  Components: " + compString + "\n"
+	s += "  Fill: " + p.fill + "\n"
+	s += "  Stroke: " + p.stroke + "\n"
+	s += "  Area: " + strconv.FormatFloat(p.Area(), 'f', -1, 64) + "\n"
+	s += "</Path>"
+	return s
+}
+
+func (c CircleShape) String() string {
+	s := ""
+	s += "<Circle>\n"
+	s += "  Center: (" + strconv.FormatFloat(c.cx, 'f', -1, 64) + ", " + strconv.FormatFloat(c.cy, 'f', -1, 64) + ")\n"
+	s += "  Radius: " + strconv.FormatFloat(c.r, 'f', -1, 64) + "\n"
+	s += "  Fill: " + c.fill + "\n"
+	s += "  Stroke: " + c.stroke + "\n"
+	s += "  Area: " + strconv.FormatFloat(c.Area(), 'f', -1, 64) + "\n"
+	s += "</Circle>"
+	return s
 }

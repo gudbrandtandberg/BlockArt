@@ -16,6 +16,9 @@ package main
 // Expects blockartlib.go to be in the ./blockartlib/ dir, relative to
 // this art-app.go file
 import (
+	"crypto/ecdsa"
+	"crypto/elliptic"
+	"crypto/rand"
 	"fmt"
 	"os"
 
@@ -30,42 +33,52 @@ var examples = map[string]string{
 	"cross": "M 1 1 L 3 3 M 1 3 L 3 1",
 	"sq1":   "M 1 1 h 2 v 2 h -2 z",
 	"sq2":   "M 2 2 h 2 v 2 h -2 z",
+	"129":   "M 1 1 l 149 100 h 10 v -10 h 10 v -10 h -10 v 10 h -10 v -10 h 10 v -10 h 100 v 100 h -100 v -50 h -10 v 50 h -10 v -50 l -10 0 z",
+	"128":   "M 1 1 l 149 99 h 10 v -10 h 10 v -10 h -10 v 10 h -10 v -10 h 10 v -10 h 100 v 100 h -100 v -50 h -10 v 50 h -10 v -50 l -10 0 z",
 }
 
 func main() {
-	// minerAddr := "127.0.0.1:8080"
-	// curve := elliptic.P224()
-	// privKey, err := ecdsa.GenerateKey(curve, rand.Reader)
+	minerAddr := "127.0.0.1:8080"
+	curve := elliptic.P224()
+	privKey, err := ecdsa.GenerateKey(curve, rand.Reader)
 
-	parser := blockartlib.NewSVGParser()
-	c1, err := parser.Parse(examples["diag1"])
+	//Open a canvas.
+	canvas, _, err := blockartlib.OpenCanvas(minerAddr, *privKey)
 	if checkError(err) != nil {
 		return
 	}
-	c2, err := parser.Parse(examples["diag2"])
+
+	validateNum := uint8(2)
+
+	// Add a line.
+	_, _, _, err = canvas.AddShape(validateNum, blockartlib.PATH, "M 0 0 L 0 5", "transparent", "red")
 	if checkError(err) != nil {
 		return
 	}
-	fmt.Println(c1)
-	fmt.Println(c2)
 
-	fmt.Println("Line area:", blockartlib.LineArea(c1))
-	fmt.Println("Shape area:", blockartlib.ShapeArea(c1[0]))
-	fmt.Println("Intersect:", blockartlib.Intersects(c1, c2))
+	// Add two lines.
+	_, _, _, err = canvas.AddShape(validateNum, blockartlib.PATH, "M 0 0 L 0 5 M 0 1 h 5", "transparent", "red")
+	if checkError(err) != nil {
+		return
+	}
 
-	// Open a canvas.
-	// _, _, err = blockartlib.OpenCanvas(minerAddr, *privKey)
-	// if checkError(err) != nil {
-	// 	return
-	// }
+	// Add a square.
+	_, _, _, err = canvas.AddShape(validateNum, blockartlib.PATH, "M 0 0 h 5 v 5 h -5 z", "blue", "black")
+	if checkError(err) != nil {
+		return
+	}
 
-	// validateNum := uint8(2)
+	// Add a circle.
+	_, _, _, err = canvas.AddShape(validateNum, blockartlib.CIRCLE, "5,5,1", "blue", "black")
+	if checkError(err) != nil {
+		return
+	}
 
-	// // Add a line.
-	// shapeHash, blockHash, ink, err := canvas.AddShape(validateNum, blockartlib.PATH, "M 0 0 L 0 5", "transparent", "red")
-	// if checkError(err) != nil {
-	// 	return
-	// }
+	// Add a 'too long' path.
+	_, _, _, err = canvas.AddShape(validateNum, blockartlib.PATH, examples["129"], "blue", "black")
+	if checkError(err) != nil {
+		return
+	}
 
 	// // Add another line.
 	// shapeHash2, blockHash2, ink2, err := canvas.AddShape(validateNum, blockartlib.PATH, "M 0 0 L 5 0", "transparent", "blue")
@@ -91,7 +104,7 @@ func main() {
 // If error is non-nil, print it out and return it.
 func checkError(err error) error {
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "Error %s", err)
+		fmt.Fprintf(os.Stderr, "Error %s\n", err)
 		return err
 	}
 	return nil

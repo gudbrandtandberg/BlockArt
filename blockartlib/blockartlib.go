@@ -154,8 +154,8 @@ type Canvas interface {
 // - DisconnectedError
 func OpenCanvas(minerAddr string, privKey ecdsa.PrivateKey) (canvas Canvas, setting CanvasSettings, err error) {
 	// TODO
-	// For now return DisconnectedError
-	return nil, CanvasSettings{}, DisconnectedError("")
+
+	return BACanvas{}, CanvasSettings{}, nil
 }
 
 //////////////////////////////
@@ -174,7 +174,25 @@ type BACanvas struct {
 // - ShapeSvgStringTooLongError
 // - ShapeOverlapError
 // - OutOfBoundsError
-func (c *BACanvas) AddShape(validateNum uint8, shapeType ShapeType, shapeSvgString string, fill string, stroke string) (shapeHash string, blockHash string, inkRemaining uint32, err error) {
+func (c BACanvas) AddShape(validateNum uint8, shapeType ShapeType, shapeSvgString string, fill string, stroke string) (shapeHash string, blockHash string, inkRemaining uint32, err error) {
+
+	parser := NewSVGParser()
+
+	shape, err := parser.Parse(shapeType, shapeSvgString, fill, stroke)
+
+	if err != nil {
+		return
+	}
+
+	if p, ok := shape.(PathShape); ok {
+		fmt.Println("Attempting to add a path element:")
+		fmt.Println(p)
+	}
+	if c, ok := shape.(CircleShape); ok {
+		fmt.Println("Attemting to add a circle element:")
+		fmt.Println(c)
+	}
+
 	return
 }
 
@@ -182,14 +200,14 @@ func (c *BACanvas) AddShape(validateNum uint8, shapeType ShapeType, shapeSvgStri
 // Can return the following errors:
 // - DisconnectedError
 // - InvalidShapeHashError
-func (c *BACanvas) GetSvgString(shapeHash string) (svgString string, err error) {
+func (c BACanvas) GetSvgString(shapeHash string) (svgString string, err error) {
 	return
 }
 
 // GetInk returns the amount of ink currently available.
 // Can return the following errors:
 // - DisconnectedError
-func (c *BACanvas) GetInk() (inkRemaining uint32, err error) {
+func (c BACanvas) GetInk() (inkRemaining uint32, err error) {
 	return
 }
 
@@ -197,7 +215,7 @@ func (c *BACanvas) GetInk() (inkRemaining uint32, err error) {
 // Can return the following errors:
 // - DisconnectedError
 // - ShapeOwnerError
-func (c *BACanvas) DeleteShape(validateNum uint8, shapeHash string) (inkRemaining uint32, err error) {
+func (c BACanvas) DeleteShape(validateNum uint8, shapeHash string) (inkRemaining uint32, err error) {
 	return
 }
 
@@ -205,14 +223,14 @@ func (c *BACanvas) DeleteShape(validateNum uint8, shapeHash string) (inkRemainin
 // Can return the following errors:
 // - DisconnectedError
 // - InvalidBlockHashError
-func (c *BACanvas) GetShapes(blockHash string) (shapeHashes []string, err error) {
+func (c BACanvas) GetShapes(blockHash string) (shapeHashes []string, err error) {
 	return
 }
 
 // GetGenesisBlock returns the block hash of the genesis block.
 // Can return the following errors:
 // - DisconnectedError
-func (c *BACanvas) GetGenesisBlock() (blockHash string, err error) {
+func (c BACanvas) GetGenesisBlock() (blockHash string, err error) {
 	return
 }
 
@@ -220,13 +238,13 @@ func (c *BACanvas) GetGenesisBlock() (blockHash string, err error) {
 // Can return the following errors:
 // - DisconnectedError
 // - InvalidBlockHashError
-func (c *BACanvas) GetChildren(blockHash string) (blockHashes []string, err error) {
+func (c BACanvas) GetChildren(blockHash string) (blockHashes []string, err error) {
 	return
 }
 
 // CloseCanvas closes the canvas/connection to the BlockArt network.
 // - DisconnectedError
-func (c *BACanvas) CloseCanvas() (inkRemaining uint32, err error) {
+func (c BACanvas) CloseCanvas() (inkRemaining uint32, err error) {
 	return
 }
 
