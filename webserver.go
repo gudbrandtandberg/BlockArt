@@ -59,9 +59,14 @@ func handleDrawRequest(w http.ResponseWriter, req *http.Request) {
 	if err != nil {
 		panic(err)
 	}
-	defer req.Body.Close()
-	log.Println(shape)
+	req.Body.Close()
 
+	// HERE WE NEED TO SUBMIT BLOCKARTLIB COMMANDS THROUGH AN ARTNODE INTO THE MINER NET
+
+	fmt.Println("Will now submit draw command to a miner!")
+	fmt.Println(shape)
+
+	// Assume eveything went OK
 	response := DrawResponse{"OK"}
 	buff, err := json.Marshal(response)
 	if err != nil {
