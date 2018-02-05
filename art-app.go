@@ -91,7 +91,7 @@ func main() {
 // If error is non-nil, print it out and return it.
 func checkError(err error) error {
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "Error %s", err.String())
+		fmt.Fprintf(os.Stderr, "Error %s", err)
 		return err
 	}
 	return nil
