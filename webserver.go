@@ -27,6 +27,7 @@ type cvsData struct {
 }
 
 func serveIndex(w http.ResponseWriter, req *http.Request) {
+	fmt.Println("Serving index")
 	w.Header().Set("Access-Control-Allow-Origin", "*")
 	data := cvsData{PageTitle: "BlockArt Drawing Server", CVSWidth: "512", CVSHeight: "512"}
 	tmpl, err := template.ParseFiles("html/index.html")
@@ -125,6 +126,7 @@ func main() {
 	go listenForNewBlocks(newBlockCh)
 	go broadcastNewBlocks(newBlockCh)
 
+	http.Handle("/", http.FileServer(http.Dir("./html/")))
 	http.Handle("/home", http.HandlerFunc(serveIndex))
 	http.Handle("/draw", http.HandlerFunc(handleDrawRequest))
 	http.Handle("/registerws", http.HandlerFunc(registerWebsocket))
