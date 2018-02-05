@@ -120,8 +120,8 @@
     <script type="text/javascript">
         function submitDrawRequest() {
             var SVGString = document.getElementById("dinput").value;
-            var stroke = document.getElementById("fill").value;
-            var fill = document.getElementById("stroke").value;
+            var stroke = document.getElementById("stroke").value;
+            var fill = document.getElementById("fill").value;
             var shapetype = document.getElementById("shapetype").value;
             console.log(SVGString)
             console.log(stroke)
@@ -154,14 +154,33 @@
         }
 
         function drawInput() {
-            
-            var x = document.getElementById("dinput").value;
+            var SVGString = document.getElementById("dinput").value;
+            var stroke = document.getElementById("stroke").value;
+            var fill = document.getElementById("fill").value;
+            var shapetype = document.getElementById("shapetype").value;
+
             var canvas = document.getElementById('myCanvas');
             var ctx = canvas.getContext('2d');
-            var p = new Path2D(x);
-            ctx.stroke(p);
-            
-            document.getElementById("text").innerHTML = x;
+            ctx.fillStyle = fill
+            ctx.strokeStyle = stroke
+
+            if (shapetype == "Path") {    
+                var p = new Path2D(SVGString);    
+                ctx.stroke(p)
+                ctx.fill(p)
+            } else if (shapetype == "Circle") {
+                ctx.beginPath();
+                // SVGString -> cx, xy, r
+                args = SVGString.split(",")
+                cx = parseInt(args[0])
+                cy = parseInt(args[1])
+                r = parseInt(args[2])
+                ctx.arc(cx, cy, r, 0,2 * Math.PI);                
+                ctx.stroke()
+                ctx.fill()
+            }
+               
+            //document.getElementById("text").innerHTML = x;
         }
     </script>
 
