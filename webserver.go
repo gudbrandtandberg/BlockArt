@@ -126,7 +126,7 @@ func main() {
 	go listenForNewBlocks(newBlockCh)
 	go broadcastNewBlocks(newBlockCh)
 
-	http.Handle("/", http.FileServer(http.Dir("./html/")))
+	http.Handle("/", http.FileServer(http.Dir("./html/"))) // for serving 'client.js'
 	http.Handle("/home", http.HandlerFunc(serveIndex))
 	http.Handle("/draw", http.HandlerFunc(handleDrawRequest))
 	http.Handle("/registerws", http.HandlerFunc(registerWebsocket))
