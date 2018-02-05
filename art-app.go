@@ -23,10 +23,6 @@ import (
 )
 
 var examples = map[string]string{
-	"a":     "M 2 1 h 1 v 1 h 1 v 1 h -1 v 1 h -1 v -1 h -1 v -1 h 1 z",
-	"b":     "M 10 10 l 100 45 H 30 z",
-	"c":     "M 37 17 v 15 H 14 V 17 z",
-	"d":     "M 0 0 L 2 0 V 1 l 1 1 l -1 1 l -2 -2 z",
 	"diag1": "M 1 1 L 3 3",
 	"diag2": "M 1 3 L 3 1",
 	"diag3": "M 3 2 L 4 3",
@@ -34,8 +30,6 @@ var examples = map[string]string{
 	"cross": "M 1 1 L 3 3 M 1 3 L 3 1",
 	"sq1":   "M 1 1 h 2 v 2 h -2 z",
 	"sq2":   "M 2 2 h 2 v 2 h -2 z",
-	"h1":    "h 1",
-	"h2":    "M 0.5 0 h 1",
 }
 
 func main() {
@@ -97,7 +91,7 @@ func main() {
 // If error is non-nil, print it out and return it.
 func checkError(err error) error {
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "Error ", err.Error())
+		fmt.Fprintf(os.Stderr, "Error %s", err.String())
 		return err
 	}
 	return nil

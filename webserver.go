@@ -10,13 +10,103 @@ import (
 	"fmt"
 	"html/template"
 	"log"
-	"math"
-	"math/rand"
+	"net"
 	"net/http"
-	"time"
 
 	"github.com/gorilla/websocket"
 )
+
+const (
+	webServerAddr = "127.0.0.1:7255"
+)
+
+type cvsData struct {
+	PageTitle string
+	CVSWidth  string
+	CVSHeight string
+}
+
+func serve(w http.ResponseWriter, req *http.Request) {
+	w.Header().Set("Access-Control-Allow-Origin", "*")
+	data := cvsData{PageTitle: "BlockArt Drawing Server", CVSWidth: "512", CVSHeight: "512"}
+	tmpl, err := template.ParseFiles("html/index.html")
+	if err != nil {
+		fmt.Println(err)
+	}
+	err = tmpl.Execute(w, data)
+	if err != nil {
+		fmt.Println(err)
+	}
+}
+
+var upgrader = websocket.Upgrader{CheckOrigin: func(r *http.Request) bool { return true }}
+var c *websocket.Conn // global ws-conn variable
+
+func websocketConnect(w http.ResponseWriter, r *http.Request) {
+	conn, err := upgrader.Upgrade(w, r, nil)
+	if err != nil {
+		log.Print("upgrade:", err)
+		return
+	}
+	c = conn
+	fmt.Println("Websocket connection to client set up")
+}
+
+func broadcastNewBlocks(ch chan Path) {
+	for {
+		p := <-ch
+		buffer, err := json.Marshal(p)
+		if err != nil {
+			fmt.Println(err)
+		}
+		err = c.WriteMessage(websocket.TextMessage, buffer)
+		if err != nil {
+			fmt.Println(err)
+		}
+	}
+}
+
+func listenForNewBlocks(ch chan Path) {
+	l, err := net.Listen("tcp", webServerAddr)
+	if err != nil {
+		fmt.Println(err)
+	}
+	fmt.Println("listening for TCP on webserverAddr:", l.Addr().String())
+	for {
+		conn, err := l.Accept()
+		if err != nil {
+			fmt.Println(err)
+		}
+		buffer := make([]byte, 1024)
+		n, err := conn.Read(buffer)
+		if err != nil {
+			fmt.Println(err)
+		}
+		var p Path
+		err = json.Unmarshal(buffer[:n], &p)
+
+		if err != nil {
+			fmt.Println(err)
+		}
+		fmt.Println("Received path:", p)
+		ch <- p
+	}
+}
+
+// serve main webpage and listen for / issue new drawing commands to the canvas
+func main() {
+	newBlockCh := make(chan Path) //doesn't need to be path, could be json really..
+	go listenForNewBlocks(newBlockCh)
+	go broadcastNewBlocks(newBlockCh)
+
+	http.Handle("/draw", http.HandlerFunc(serve))
+	http.Handle("/registerws", http.HandlerFunc(websocketConnect))
+
+	fmt.Println("Starting server...")
+	log.Fatal(http.ListenAndServe(":8080", nil))
+}
+
+// This stuff should not really live here, but good to have some blockartlib functions for testing
 
 // A Path contains fields for drawing SVG path elements
 type Path struct {
@@ -25,83 +115,30 @@ type Path struct {
 	Stroke    string
 }
 
-type Circle struct {
-	cx, cy, r float64
-	Fill      string
-	Stroke    string
-}
+// // Area is a way of computing area from Path object
+// func (p Path) Area() float64 {
+// 	parser := blockartlib.NewSVGParser()
+// 	components, err := parser.Parse(p.SVGString)
+// 	if err != nil {
+// 		log.Fatal(err)
+// 	}
 
-type Shape interface {
-	Area() float64
-}
+// 	if p.Fill != "transparent" { // closed path
+// 		return blockartlib.ShapeArea(components[0])
+// 	}
+// 	return blockartlib.LineArea(components) // open path
+// }
 
-func (c Circle) Area() float64 {
-	return 0.0
-}
-
-func (p Path) Area() float64 {
-	return 0.0
-}
-
-var blackSquare = Path{"M 10 10 h 100 v 100 h -100 v -100", "black", "black"}
-var yellowSquare = Path{"M 110 110 h 100 v 100 h -100 v -100", "yellow", "black"}
-var redSquare = Path{"M 210 10 h 100 v 100 h -100 v -100", "red", "black"}
-var blueSquare = Path{"M 10 210 h 100 v 100 h -100 v -100", "blue", "black"}
-var greenSquare = Path{"M 210 210 h 100 v 100 h -100 v -100", "green", "black"}
-
-var commandQueue = []Path{blackSquare, yellowSquare, redSquare, blueSquare, greenSquare}
-
-const (
-	delayMean = 4.0
-	delayStd  = 3.0
-)
-
-type cvsData struct {
-	PageTitle string
-}
-
-func serve(w http.ResponseWriter, req *http.Request) {
-	w.Header().Set("Access-Control-Allow-Origin", "*")
-	data := cvsData{PageTitle: "BlockArt Drawing Server"}
-	tmpl, err := template.ParseFiles("html/index.html")
-	tmpl.Execute(w, data)
-	if err != nil {
-		log.Fatal(err)
-	}
-}
-
-var upgrader = websocket.Upgrader{CheckOrigin: func(r *http.Request) bool { return true }}
-
-func serveNewShape(w http.ResponseWriter, r *http.Request) {
-	c, err := upgrader.Upgrade(w, r, nil)
-	if err != nil {
-		log.Print("upgrade:", err)
-		return
-	}
-	defer c.Close()
-	for i := 0; i < len(commandQueue); i++ {
-		delay := time.Duration(math.Max(rand.NormFloat64()*delayStd+delayMean, 0.0))
-		time.Sleep(delay * time.Second)
-
-		cmd := commandQueue[i]
-		msg, err := json.Marshal(cmd)
-		if err != nil {
-			fmt.Println("json:", err)
-		}
-
-		err = c.WriteMessage(websocket.TextMessage, msg)
-		if err != nil {
-			log.Println("write:", err)
-			break
-		}
-	}
-}
-
-// serve main webpage and issue new drawing commands to the canvas
-// over a websocket connection
-func main() {
-	http.Handle("/draw", http.HandlerFunc(serve))
-	http.Handle("/commandserver", http.HandlerFunc(serveNewShape))
-	fmt.Println("Starting server...")
-	log.Fatal(http.ListenAndServe(":8080", nil))
-}
+// // Intersects checks if two paths intersect
+// func Intersects(p1, p2 Path) bool {
+// 	parser := blockartlib.NewSVGParser()
+// 	c1, err := parser.Parse(p1.SVGString)
+// 	if err != nil {
+// 		log.Fatal(err)
+// 	}
+// 	c2, err := parser.Parse(p2.SVGString)
+// 	if err != nil {
+// 		log.Fatal(err)
+// 	}
+// 	return blockartlib.Intersects(c1, c2)
+// }
