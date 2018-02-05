@@ -6,6 +6,7 @@
 package main
 
 import (
+	"encoding/json"
 	"fmt"
 	"html/template"
 	"log"
@@ -25,7 +26,7 @@ type cvsData struct {
 	CVSHeight string
 }
 
-func serve(w http.ResponseWriter, req *http.Request) {
+func serveIndex(w http.ResponseWriter, req *http.Request) {
 	w.Header().Set("Access-Control-Allow-Origin", "*")
 	data := cvsData{PageTitle: "BlockArt Drawing Server", CVSWidth: "512", CVSHeight: "512"}
 	tmpl, err := template.ParseFiles("html/index.html")
@@ -38,10 +39,41 @@ func serve(w http.ResponseWriter, req *http.Request) {
 	}
 }
 
+// DrawResponse is the response the webserver sends to the webclient
+type DrawResponse struct {
+	Status string
+}
+
+// Shape stores the draw command that has been issued by a client
+type Shape struct {
+	SVGString string
+	Fill      string
+	Stroke    string
+	ShapeType string
+}
+
+func handleDrawRequest(w http.ResponseWriter, req *http.Request) {
+	decoder := json.NewDecoder(req.Body)
+	var shape Shape
+	err := decoder.Decode(&shape)
+	if err != nil {
+		panic(err)
+	}
+	defer req.Body.Close()
+	log.Println(shape)
+
+	response := DrawResponse{"OK"}
+	buff, err := json.Marshal(response)
+	if err != nil {
+		fmt.Println(err)
+	}
+	w.Write(buff)
+}
+
 var upgrader = websocket.Upgrader{CheckOrigin: func(r *http.Request) bool { return true }}
 var c *websocket.Conn // global ws-conn variable
 
-func websocketConnect(w http.ResponseWriter, r *http.Request) {
+func registerWebsocket(w http.ResponseWriter, r *http.Request) {
 	conn, err := upgrader.Upgrade(w, r, nil)
 	if err != nil {
 		log.Print("upgrade:", err)
@@ -88,8 +120,9 @@ func main() {
 	go listenForNewBlocks(newBlockCh)
 	go broadcastNewBlocks(newBlockCh)
 
-	http.Handle("/draw", http.HandlerFunc(serve))
-	http.Handle("/registerws", http.HandlerFunc(websocketConnect))
+	http.Handle("/home", http.HandlerFunc(serveIndex))
+	http.Handle("/draw", http.HandlerFunc(handleDrawRequest))
+	http.Handle("/registerws", http.HandlerFunc(registerWebsocket))
 
 	fmt.Println("Starting server...")
 	log.Fatal(http.ListenAndServe(":8080", nil))

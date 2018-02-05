@@ -26,7 +26,7 @@
                 var command = JSON.parse(event.data)
                 console.log(command)
                 drawCommand(command)
-            }
+                }
         }
 
         function drawCommand(command) {
@@ -52,21 +52,115 @@
 <body>
     <h1>{{.PageTitle}}</h1>
 
-    <p>Enter a 'd' SVG command below:</p>
-    d: <input type="text" id="input" value="">
-    <button onclick="drawInput()">Draw</button>
-    <p></p>
-    </br>
-    <canvas id="myCanvas" width="{{.CVSWidth}}" height="{{.CVSHeight}}" style="border:2px solid #361a1a;">.</canvas>
+    <p>
+        Enter SVG command below:
+    </p>
+
+    <table style="width: 80%">
+        <tr>
+            <td>
+                SVGString:
+            </td>
+            <td>
+                <input type="text" id="dinput" value="">
+            </td>
+        </tr>
+        <tr>
+            <td>
+                shapetype:
+            </td>
+            <td>
+                <select id="shapetype">
+                    <option>Path</option>
+                    <option>Circle</option>
+                </select>
+            </td>
+        </tr>
+        <tr>
+            <td>
+                fill:
+            </td>
+            <td>
+                <select id="fill">
+                    <option>transparent</option>
+                    <option>black</option>
+                    <option>blue</option>
+                    <option>red</option>
+                    <option>green</option>
+                    <option>yellow</option>
+                </select>
+            </td>
+        </tr>
+        <tr>
+            <td>
+                stroke:
+            </td>
+            <td>
+                <select id="stroke">
+                    <option>transparent</option>
+                    <option>black</option>
+                    <option>blue</option>
+                    <option>red</option>
+                    <option>green</option>
+                    <option>yellow</option>
+                </select>
+            </td>
+        </tr>
+        <tr>
+            <td align="left">
+                <button onclick="submitDrawRequest()">Submit</button>
+            </td>
+        </tr>
+    </table>
+
     <p id="text"></p>
     
+    <canvas id="myCanvas" width="{{.CVSWidth}}" height="{{.CVSHeight}}" style="border:2px solid #361a1a;">.</canvas>
+
     <script type="text/javascript">
+        function submitDrawRequest() {
+            var SVGString = document.getElementById("dinput").value;
+            var stroke = document.getElementById("fill").value;
+            var fill = document.getElementById("stroke").value;
+            var shapetype = document.getElementById("shapetype").value;
+            console.log(SVGString)
+            console.log(stroke)
+            console.log(fill)
+            console.log(shapetype)
+            var shape = {"SVGString": SVGString,
+             "Stroke": stroke,
+             "Fill": fill,
+             "ShapeType": shapetype}
+             post(shape)
+        }
+
+        var headers = {
+            'Accept': 'application/json',
+            'Content-Type': 'application/json'
+        }
+
+        function post(shape) {
+            fetch("http://localhost:8080/draw",
+                    {method: "POST",
+                    body: JSON.stringify(shape)},
+                ).then(function(res){ res.text().then(function(data){
+                        var response = JSON.parse(data)
+                        if (response["Status"] == "OK") {
+                            console.log("Status is ok")
+                            drawInput()
+                        }
+                    })})
+                .catch(function(res){ console.log(res) })
+        }
+
         function drawInput() {
-            var x = document.getElementById("input").value;
+            
+            var x = document.getElementById("dinput").value;
             var canvas = document.getElementById('myCanvas');
             var ctx = canvas.getContext('2d');
             var p = new Path2D(x);
             ctx.stroke(p);
+            
             document.getElementById("text").innerHTML = x;
         }
     </script>
