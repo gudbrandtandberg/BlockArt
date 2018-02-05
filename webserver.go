@@ -6,7 +6,6 @@
 package main
 
 import (
-	"encoding/json"
 	"fmt"
 	"html/template"
 	"log"
@@ -52,21 +51,17 @@ func websocketConnect(w http.ResponseWriter, r *http.Request) {
 	fmt.Println("Websocket connection to client set up")
 }
 
-func broadcastNewBlocks(ch chan Path) {
+func broadcastNewBlocks(ch chan []byte) {
 	for {
-		p := <-ch
-		buffer, err := json.Marshal(p)
-		if err != nil {
-			fmt.Println(err)
-		}
-		err = c.WriteMessage(websocket.TextMessage, buffer)
+		buffer := <-ch
+		err := c.WriteMessage(websocket.TextMessage, buffer)
 		if err != nil {
 			fmt.Println(err)
 		}
 	}
 }
 
-func listenForNewBlocks(ch chan Path) {
+func listenForNewBlocks(ch chan []byte) {
 	l, err := net.Listen("tcp", webServerAddr)
 	if err != nil {
 		fmt.Println(err)
@@ -82,20 +77,14 @@ func listenForNewBlocks(ch chan Path) {
 		if err != nil {
 			fmt.Println(err)
 		}
-		var p Path
-		err = json.Unmarshal(buffer[:n], &p)
-
-		if err != nil {
-			fmt.Println(err)
-		}
-		fmt.Println("Received path:", p)
-		ch <- p
+		buffer = buffer[:n]
+		ch <- buffer
 	}
 }
 
 // serve main webpage and listen for / issue new drawing commands to the canvas
 func main() {
-	newBlockCh := make(chan Path) //doesn't need to be path, could be json really..
+	newBlockCh := make(chan []byte)
 	go listenForNewBlocks(newBlockCh)
 	go broadcastNewBlocks(newBlockCh)
 
@@ -107,13 +96,12 @@ func main() {
 }
 
 // This stuff should not really live here, but good to have some blockartlib functions for testing
-
 // A Path contains fields for drawing SVG path elements
-type Path struct {
-	SVGString string
-	Fill      string
-	Stroke    string
-}
+// type Path struct {
+// 	SVGString string
+// 	Fill      string
+// 	Stroke    string
+// }
 
 // // Area is a way of computing area from Path object
 // func (p Path) Area() float64 {

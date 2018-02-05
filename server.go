@@ -22,6 +22,27 @@ type Path struct {
 	Stroke    string
 }
 
+// Every time a new block is made, this process will broadcast the block to the web-server
+func broadcastNewBlock(ch chan Path) {
+	for {
+		p := <-ch
+		fmt.Println("About to tell the webserver about the new block")
+		conn, err := net.Dial("tcp", webServerAddr)
+		if err != nil {
+			fmt.Println(err)
+		}
+		msg, err := json.Marshal(p)
+		if err != nil {
+			fmt.Println(err)
+		}
+		_, err = conn.Write(msg)
+		if err != nil {
+			fmt.Println(err)
+		}
+		conn.Close()
+	}
+}
+
 var blackSquare = Path{"M 10 10 h 100 v 100 h -100 v -100", "black", "black"}
 var yellowSquare = Path{"M 110 110 h 100 v 100 h -100 v -100", "yellow", "black"}
 var redSquare = Path{"M 210 10 h 100 v 100 h -100 v -100", "red", "black"}
@@ -33,10 +54,11 @@ var commandQueue = []Path{blackSquare, yellowSquare, redSquare, blueSquare, gree
 func main() {
 
 	newBlockCh := make(chan Path) // should contain blocks in the future
-	i := 0
-	go broadcastNewBlocks(newBlockCh)
+	go broadcastNewBlock(newBlockCh)
 
 	// pretend to be getting new shapes from the Block Chain/Mining Network
+	// start with 5 randomly timed drawing commands
+	i := 0
 	for {
 		delay := time.Duration(math.Max(rand.NormFloat64()*delayStd+delayMean, 0.0))
 		time.Sleep(delay * time.Second)
@@ -45,29 +67,6 @@ func main() {
 			newBlockCh <- commandQueue[i]
 		}
 		i++
-	}
-
-}
-
-// Every time a new block is made, this process will broadcast the block to the web-server
-func broadcastNewBlocks(ch chan Path) {
-
-	for {
-		p := <-ch
-		fmt.Println("About to tell the webserver about the new block")
-		conn, err := net.Dial("tcp", webServerAddr)
-		if err != nil {
-			fmt.Println(err)
-		}
-		msg, err := json.Marshal(p)
-		if err != nil {
-			fmt.Println("json:", err)
-		}
-		_, err = conn.Write(msg)
-		if err != nil {
-			fmt.Println(err)
-		}
-		conn.Close()
 	}
 
 }
