@@ -327,24 +327,60 @@ func IsOutOfBounds(shape Shape, w, h float64) bool {
 	return false
 }
 
-// Intersects is true if the two shapes described by the arguments intersect
+// Intersects is true if the 'shape1' and 'shape2' intersect
 func Intersects(shape1, shape2 Shape) bool {
 
-	// - Path / Path
+	// Path / Path
 	p1, isPath1 := shape1.(PathShape)
 	p2, isPath2 := shape2.(PathShape)
+
 	if isPath1 && isPath2 {
-		return openIntersects(p1.components, p2.components)
+		if p1.fill == "transparent" && p2.fill == "transparent" { // Open / Open
+			return openIntersects(p1.components, p2.components)
+		} else if p1.fill != "transparent" && p2.fill != "transparent" { // Closed / Closed
+			if openIntersects(p1.components, p2.components) {
+				return true
+			}
+			for _, point := range p1.components.points() {
+				if pointInPolygon(point, p2.components[0]) {
+					return true
+				}
+			}
+			for _, point := range p2.components.points() {
+				if pointInPolygon(point, p1.components[0]) {
+					return true
+				}
+			}
+		} else { // Open / Closed
+			if openIntersects(p1.components, p2.components) {
+				return true
+			}
+			if p1.fill == "transparent" && p2.fill != "transparent" {
+				for _, point := range p1.components.points() {
+					if pointInPolygon(point, p2.components[0]) {
+						return true
+					}
+				}
+			}
+			if p1.fill != "transparent" && p2.fill == "transparent" {
+				for _, point := range p2.components.points() {
+					if pointInPolygon(point, p1.components[0]) {
+						return true
+					}
+				}
+			}
+			return false
+		}
 	}
 
-	// - Circle / Circle
+	// Circle / Circle
 	c1, isCircle1 := shape1.(CircleShape)
 	c2, isCircle2 := shape2.(CircleShape)
 	if isCircle1 && isCircle2 {
 		return circlesIntersect(c1, c2)
 	}
 
-	// - Circle / Path
+	// Circle / Path
 	if isPath1 && isCircle2 {
 		return pathIntersectsCircle(p1, c2)
 	}
@@ -352,17 +388,31 @@ func Intersects(shape1, shape2 Shape) bool {
 		return pathIntersectsCircle(p2, c1)
 	}
 
+	fmt.Println("Hit bottom")
 	return false
 }
 
-// A path shape intersects a circle shape if and only if at least one of
-// the points along the path is inside the circle
+// A path shape intersects a circle shape
 func pathIntersectsCircle(path PathShape, circle CircleShape) bool {
-	for _, point := range path.components.points() {
-		if circleContainsPoint(circle, point) {
+	if circle.fill != "transparent" {
+		// a path intersects a disk if and only if at least one of
+		// the points along the path is inside the circle
+		for _, point := range path.components.points() {
+			if circleContainsPoint(circle, point) {
+				return true
+			}
+		}
+	}
+	// fill == transparent; check if any of the lines intersect the circle
+	for _, line := range path.components.lines() {
+		if circleIntersectsLine(circle, line) {
 			return true
 		}
 	}
+	return false
+}
+
+func circleIntersectsLine(circle CircleShape, line Line2d) bool {
 	return false
 }
 
@@ -377,10 +427,7 @@ func circlesIntersect(c1, c2 CircleShape) bool {
 // openIntersects is true if any of the lines in the first shape
 // intersect with any of the lines in the second shape
 // - OpenPath / OpenPath
-// - ClosedPath / OpenPath
-// - ClosedPath / ClosedPath      <--- should be treated differently
 func openIntersects(shape1, shape2 Components) bool {
-
 	for _, line1 := range shape1.lines() {
 		for _, line2 := range shape2.lines() {
 			if linesIntersect(line1, line2) {
@@ -449,6 +496,26 @@ func (l Line2d) contains(p Point2d) bool {
 		return true
 	}
 	return false
+}
+
+// pointInPolygon returns true if 'point' is inside the polygon
+// from: http://alienryderflex.com/polygon/
+func pointInPolygon(point Point2d, vertices Component) bool {
+	numVertices := len(vertices)
+	x := point.x
+	y := point.y
+	i := 0
+	j := numVertices - 1
+	oddNodes := false
+	for i = 0; i < numVertices; i++ {
+		if (vertices[i].y < y && vertices[j].y >= y) || (vertices[j].y < y && vertices[i].y >= y) {
+			if vertices[j].x+(y-vertices[i].y)/(vertices[j].y-vertices[i].y)*(vertices[j].x-vertices[j].x) < x {
+				oddNodes = !oddNodes
+			}
+		}
+		j = i
+	}
+	return oddNodes
 }
 
 func euclidDist(u, v Point2d) float64 {
