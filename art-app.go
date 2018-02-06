@@ -26,23 +26,26 @@ import (
 )
 
 var examples = map[string]string{
-	"diag1": "M 1 1 L 3 3",
-	"diag2": "M 1 3 L 3 1",
-	"diag3": "M 3 2 L 4 3",
-	"diag4": "M 1 1 L 4 4",
-	"cross": "M 1 1 L 3 3 M 1 3 L 3 1",
-	"sq1":   "M 1 1 h 2 v 2 h -2 z",
-	"sq2":   "M 2 2 h 2 v 2 h -2 z",
-	"sq3":   "M 1.1 1.1 h 1 v 1 h -1 z", //is contained in sq1
-	"line1": "M 1.1 1.1 l 1 1",          //is contained in sq1
-	"129":   "M 1 1 l 149 100 h 10 v -10 h 10 v -10 h -10 v 10 h -10 v -10 h 10 v -10 h 100 v 100 h -100 v -50 h -10 v 50 h -10 v -50 l -10 0 z",
-	"128":   "M 1 1 l 149 99 h 10 v -10 h 10 v -10 h -10 v 10 h -10 v -10 h 10 v -10 h 100 v 100 h -100 v -50 h -10 v 50 h -10 v -50 l -10 0 z",
+	"diag1":          "M 1 1 L 3 3",
+	"diag2":          "M 1 3 L 3 1",
+	"diag3":          "M 3 2 L 4 3",
+	"diag4":          "M 1 1 L 4 4",
+	"cross":          "M 1 1 L 3 3 M 1 3 L 3 1",
+	"sq1":            "M 1 1 h 2 v 2 h -2 z",
+	"sq2":            "M 2 2 h 2 v 2 h -2 z",
+	"sq3":            "M 1.1 1.1 h 1 v 1 h -1 z", //is contained in sq1
+	"line1":          "M 1.1 1.1 l 1 1",          //is contained in sq1
+	"129":            "M 1 1 l 149 100 h 10 v -10 h 10 v -10 h -10 v 10 h -10 v -10 h 10 v -10 h 100 v 100 h -100 v -50 h -10 v 50 h -10 v -50 l -10 0 z",
+	"128":            "M 1 1 l 149 99 h 10 v -10 h 10 v -10 h -10 v 10 h -10 v -10 h 10 v -10 h 100 v 100 h -100 v -50 h -10 v 50 h -10 v -50 l -10 0 z",
+	"unitcircle":     "0, 0, 1",
+	"pathinside":     "M 0 0 l 0.3 0.2 l -0.3 0 z",
+	"pathoutside":    "M 2 2 h 10",
+	"pathintersects": "L 3 3 l 0 -3 z",
 }
 
 func main() {
 
 	testParser()
-	return
 
 	minerAddr := "127.0.0.1:8080"
 	curve := elliptic.P224()
@@ -119,8 +122,8 @@ func checkError(err error) error {
 func testParser() {
 	parser := blockartlib.NewSVGParser()
 
-	shape1, _ := parser.Parse(blockartlib.PATH, examples["sq1"], "black", "black")
-	shape2, _ := parser.Parse(blockartlib.PATH, examples["line1"], "transparent", "black")
+	shape1, _ := parser.Parse(blockartlib.CIRCLE, examples["unitcircle"], "blue", "black")
+	shape2, _ := parser.Parse(blockartlib.PATH, examples["pathinside"], "transparent", "black")
 
 	fmt.Println(shape1)
 	fmt.Println(shape2)

@@ -413,6 +413,10 @@ func pathIntersectsCircle(path PathShape, circle CircleShape) bool {
 }
 
 func circleIntersectsLine(circle CircleShape, line Line2d) bool {
+	if circleContainsPoint(circle, line.a) && !circleContainsPoint(circle, line.b) ||
+		!circleContainsPoint(circle, line.a) && circleContainsPoint(circle, line.b) {
+		return true
+	}
 	return false
 }
 
