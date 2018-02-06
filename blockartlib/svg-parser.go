@@ -529,20 +529,6 @@ func isClosedPath(path Component) bool {
 	return euclidDist(path[len(path)-1], path[0]) < EPSILON
 }
 
-func isClosed(c Components) bool {
-	if len(c) != 1 {
-		return false
-	}
-	if isClosedPath(c[0]) {
-		return true
-	}
-	return false
-}
-
-func isOpen(c Components) bool {
-	return !isClosed(c)
-}
-
 func (p PathShape) String() string {
 	compString := fmt.Sprintf("%s", p.components)
 	s := ""
