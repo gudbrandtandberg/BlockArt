@@ -179,7 +179,11 @@ func monitor(k string, heartBeatInterval time.Duration) {
 	for {
 		allMiners.Lock()
 		if time.Now().UnixNano()-allMiners.all[k].RecentHeartbeat > int64(heartBeatInterval) {
-			outLog.Printf("%s timed out\n", allMiners.all[k].Address.String())
+			fmt.Println("timed out",
+				int64(time.Now().UnixNano()),
+				int64(allMiners.all[k].RecentHeartbeat),
+					int64(heartBeatInterval),
+						allMiners.all[k].Address.String())
 			delete(allMiners.all, k)
 			allMiners.Unlock()
 			return
@@ -273,7 +277,8 @@ func (s *RServer) GetNodes(key ecdsa.PublicKey, addrSet *[]net.Addr) error {
 		minerAddresses[n-1], minerAddresses[randIndex] = minerAddresses[randIndex], minerAddresses[n-1]
 	}
 
-	*addrSet = minerAddresses[:config.NumMinerToReturn]
+	numMiners := math.Min(float64(len(allMiners.all)-1), float64(config.NumMinerToReturn))
+	*addrSet = minerAddresses[:int64(numMiners)]
 
 	return nil
 }
@@ -287,6 +292,8 @@ func (s *RServer) GetNodes(key ecdsa.PublicKey, addrSet *[]net.Addr) error {
 // Returns:
 // - UnknownKeyError if the server does not know a miner with this publicKey.
 func (s *RServer) HeartBeat(key ecdsa.PublicKey, _ignored *bool) error {
+	fmt.Println("Received HB:")
+
 	allMiners.Lock()
 	defer allMiners.Unlock()
 
