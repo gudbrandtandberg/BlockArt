@@ -1,7 +1,7 @@
 window.onload = function(){
     var exampleSocket = new WebSocket("ws://127.0.0.1:8080/registerws")
     exampleSocket.onmessage = receiveBlock
-    document.getElementById("theCanvas").addEventListener("click", clickedCanvas)
+    document.getElementById("canvas").addEventListener("click", clickedCanvas)
     document.addEventListener('keypress', keyPressed)
 }
 function keyPressed(event) {
@@ -12,7 +12,7 @@ function keyPressed(event) {
 function clickedCanvas(event) {
     var x = event.clientX
     var y = event.clientY
-    canvas = document.getElementById("theCanvas")
+    canvas = document.getElementById("canvas")
     x -= canvas.offsetLeft;
     y -= canvas.offsetTop;
     var command
@@ -56,7 +56,7 @@ function setShape(shape) {
 }
 function drawCommand(command) {
     d = command.SVGString
-    var canvas = document.getElementById('theCanvas');
+    var canvas = document.getElementById('canvas');
     var ctx = canvas.getContext('2d');
     var p = new Path2D(d);
     ctx.fillStyle = command.Fill
@@ -88,10 +88,11 @@ function post(shape) {
             body: JSON.stringify(shape)},
         ).then(function(res){ res.text().then(function(data){
                 var response = JSON.parse(data)
-                if (response["Status"] == "OK") {
-                    console.log("Status is ok")
-                    drawInput()
+                if (response["Status"] != "OK") {
+                    alert(response["Status"])
+                    return
                 }
+                drawInput()
             })})
         .catch(function(res){ console.log(res) })
 }
@@ -101,7 +102,7 @@ function drawInput() {
     var fill = document.getElementById("fill").value;
     var shapetype = document.getElementById("shapetype").value;
 
-    var canvas = document.getElementById('theCanvas');
+    var canvas = document.getElementById('canvas');
     var ctx = canvas.getContext('2d');
     ctx.fillStyle = fill
     ctx.strokeStyle = stroke

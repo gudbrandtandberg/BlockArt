@@ -18,6 +18,7 @@ import (
 	"net"
 	"net/http"
 
+	"./blockartlib"
 	"github.com/gorilla/websocket"
 )
 
@@ -38,9 +39,12 @@ func serveIndex(w http.ResponseWriter, req *http.Request) {
 	// then client shows webserver its identity.. fix registration here.
 	curve := elliptic.P384()
 	key, _ := ecdsa.GenerateKey(curve, rand.Reader)
-	keyBytes, _ := x509.MarshalECPrivateKey(key)
-	keyString := hex.EncodeToString(keyBytes)
-	data := cvsData{PageTitle: "BlockArt Drawing Server", Key: keyString}
+	keyString, err := encodeKey(*key)
+	if err != nil {
+		fmt.Println(err)
+	}
+
+	data := cvsData{PageTitle: "BlockArt Client App", Key: keyString}
 
 	tmpl, err := template.ParseFiles("html/index.html")
 	if err != nil {
@@ -54,7 +58,9 @@ func serveIndex(w http.ResponseWriter, req *http.Request) {
 
 // DrawResponse is the response the webserver sends to the webclient
 type DrawResponse struct {
-	Status string
+	Status  string
+	CanvasX uint32
+	CanvasY uint32
 }
 
 // DrawCommand stores the draw command that has been issued by a client
@@ -67,27 +73,78 @@ type DrawCommand struct {
 	Addr      string
 }
 
+const valNum = uint8(2)
+
 func handleDrawRequest(w http.ResponseWriter, req *http.Request) {
 	decoder := json.NewDecoder(req.Body)
 	var cmd DrawCommand
 	err := decoder.Decode(&cmd)
 	if err != nil {
-		panic(err)
+		fmt.Println(err)
 	}
 	req.Body.Close()
-
-	// HERE WE NEED TO SUBMIT BLOCKARTLIB COMMANDS THROUGH AN ARTNODE INTO THE MINER NET
+	key, err := decodeKey(cmd.Key)
+	if err != nil {
+		fmt.Println(err)
+		return
+	}
 
 	fmt.Println("Will now submit draw command to a miner!")
-	fmt.Println(cmd)
+	response := DrawResponse{}
 
-	// Assume eveything went OK
-	response := DrawResponse{"OK"}
-	buff, err := json.Marshal(response)
+	canvas, settings, err := blockartlib.OpenCanvas(cmd.Addr, *key)
+	if err != nil {
+		response.Status = err.Error()
+		writeResponse(w, response)
+		return
+	}
+	response.CanvasX = settings.CanvasXMax
+	response.CanvasY = settings.CanvasYMax
+
+	shapeType := parseShapeType(cmd.ShapeType)
+	_, _, _, err = canvas.AddShape(valNum, shapeType, cmd.SVGString, cmd.Fill, cmd.Stroke)
+	if err != nil {
+		response.Status = err.Error()
+		writeResponse(w, response)
+		return
+	}
+	response.Status = "OK"
+	writeResponse(w, response)
+}
+
+func writeResponse(w http.ResponseWriter, res DrawResponse) {
+	buff, err := json.Marshal(res)
 	if err != nil {
 		fmt.Println(err)
 	}
 	w.Write(buff)
+}
+
+func decodeKey(hexStr string) (key *ecdsa.PrivateKey, err error) {
+	keyBytes, err := hex.DecodeString(hexStr)
+	if err != nil {
+		return key, err
+	}
+	return x509.ParseECPrivateKey(keyBytes)
+}
+func encodeKey(key ecdsa.PrivateKey) (string, error) {
+	keyBytes, err := x509.MarshalECPrivateKey(&key)
+	if err != nil {
+		return "", err
+	}
+	keyString := hex.EncodeToString(keyBytes)
+	return keyString, nil
+}
+
+func parseShapeType(shapeType string) blockartlib.ShapeType {
+	switch shapeType {
+	case "Path":
+		return blockartlib.PATH
+	case "Circle":
+		return blockartlib.CIRCLE
+	default:
+		return blockartlib.PATH
+	}
 }
 
 var upgrader = websocket.Upgrader{CheckOrigin: func(r *http.Request) bool { return true }}

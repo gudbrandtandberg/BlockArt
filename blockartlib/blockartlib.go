@@ -155,7 +155,7 @@ type Canvas interface {
 func OpenCanvas(minerAddr string, privKey ecdsa.PrivateKey) (canvas Canvas, setting CanvasSettings, err error) {
 	// TODO
 
-	return BACanvas{}, CanvasSettings{}, nil
+	return BACanvas{}, CanvasSettings{200, 20}, nil
 }
 
 //////////////////////////////
