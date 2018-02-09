@@ -27,8 +27,6 @@ const (
 
 type cvsData struct {
 	PageTitle string
-	CVSWidth  string
-	CVSHeight string
 	Key       string
 }
 
@@ -36,14 +34,13 @@ func serveIndex(w http.ResponseWriter, req *http.Request) {
 	fmt.Println("Serving index")
 	w.Header().Set("Access-Control-Allow-Origin", "*")
 
+	// This is a bit circular: webserver gives the client an identity,
+	// then client shows webserver its identity.. fix registration here.
 	curve := elliptic.P384()
-	key, err := ecdsa.GenerateKey(curve, rand.Reader)
-
-	bytes, err := x509.MarshalECPrivateKey(key)
-
-	keyString := hex.EncodeToString(bytes)
-
-	data := cvsData{PageTitle: "BlockArt Drawing Server", CVSWidth: "450", CVSHeight: "450", Key: keyString}
+	key, _ := ecdsa.GenerateKey(curve, rand.Reader)
+	keyBytes, _ := x509.MarshalECPrivateKey(key)
+	keyString := hex.EncodeToString(keyBytes)
+	data := cvsData{PageTitle: "BlockArt Drawing Server", Key: keyString}
 
 	tmpl, err := template.ParseFiles("html/index.html")
 	if err != nil {
@@ -60,18 +57,20 @@ type DrawResponse struct {
 	Status string
 }
 
-// Shape stores the draw command that has been issued by a client
-type Shape struct {
+// DrawCommand stores the draw command that has been issued by a client
+type DrawCommand struct {
 	SVGString string
 	Fill      string
 	Stroke    string
 	ShapeType string
+	Key       string
+	Addr      string
 }
 
 func handleDrawRequest(w http.ResponseWriter, req *http.Request) {
 	decoder := json.NewDecoder(req.Body)
-	var shape Shape
-	err := decoder.Decode(&shape)
+	var cmd DrawCommand
+	err := decoder.Decode(&cmd)
 	if err != nil {
 		panic(err)
 	}
@@ -80,7 +79,7 @@ func handleDrawRequest(w http.ResponseWriter, req *http.Request) {
 	// HERE WE NEED TO SUBMIT BLOCKARTLIB COMMANDS THROUGH AN ARTNODE INTO THE MINER NET
 
 	fmt.Println("Will now submit draw command to a miner!")
-	fmt.Println(shape)
+	fmt.Println(cmd)
 
 	// Assume eveything went OK
 	response := DrawResponse{"OK"}

@@ -17,7 +17,6 @@ function clickedCanvas(event) {
     y -= canvas.offsetTop;
     var command
     var type = document.getElementById("shapetype").value
-    console.log(type)
     if (type === "Path") {
         command = "M " + x + " " + y
     } else {
@@ -65,20 +64,23 @@ function drawCommand(command) {
     ctx.stroke(p);
     ctx.fill(p)
 }
+function deleteCommand(command) {
+
+}
 function submitDrawRequest() {
     var SVGString = document.getElementById("dinput").value;
     var stroke = document.getElementById("stroke").value;
     var fill = document.getElementById("fill").value;
     var shapetype = document.getElementById("shapetype").value;
-    console.log(SVGString)
-    console.log(stroke)
-    console.log(fill)
-    console.log(shapetype)
-    var shape = {"SVGString": SVGString,
-     "Stroke": stroke,
-     "Fill": fill,
-     "ShapeType": shapetype}
-     post(shape)
+    var key = document.getElementById("keyTA").value;
+    var addr = document.getElementById("serveraddr").value;
+    var request = { "SVGString": SVGString,
+                    "Stroke": stroke,
+                    "Fill": fill,
+                    "ShapeType": shapetype,
+                    "Key": key, 
+                    "Addr": addr, }
+     post(request)
 }
 function post(shape) {
     fetch("http://localhost:8080/draw",
