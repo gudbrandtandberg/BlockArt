@@ -70,14 +70,14 @@
                                     </select>
                                 </td>
                             </tr>
-                            <tr>
+                            <!-- <tr>
                                 <td>
                                     Server address: 
                                 </td>
                                 <td>
                                     <input type="text" id="serveraddr" value="127.0.0.1:4444" style="width: ">
                                 </td>
-                            </tr>
+                            </tr> -->
                             <tr>
                                 <td>
                                     <button onclick="clearDinput()">Clear</button>
@@ -97,7 +97,9 @@
                     </div>
                 </div>
                 <canvas id="canvas" width="450" height="450" style="border:2px solid #361a1a;">.</canvas>
-
+                <p style="margin: 0 auto;">
+                    Choose a shape type, then <br> - Click anywhere in the canvas <br> - Complete the SVG string
+                </p>
             </div>
         </div>
 
@@ -112,7 +114,15 @@
         
         <div id="key" class="box">
             <div id="keycontents">
-                <textarea id="keyTA" cols="8" rows="38" style="resize: none">{{.Key}}</textarea>
+                    
+                <p style="margin: 2px 2px;">
+                    Miner Address:
+                </p>
+
+                <input type="text" id="serveraddr" value="127.0.0.1:4444" style="margin: 2px 2px;">
+                
+                <textarea id="keyTA" style="resize: none">{{.Key}}</textarea>
+
             </div>
         </div>
 

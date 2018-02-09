@@ -155,7 +155,12 @@ type Canvas interface {
 func OpenCanvas(minerAddr string, privKey ecdsa.PrivateKey) (canvas Canvas, setting CanvasSettings, err error) {
 	// TODO
 
-	return BACanvas{}, CanvasSettings{200, 20}, nil
+	x, y := uint32(1024), uint32(1024) // shoud come from call to miner
+
+	setting = CanvasSettings{x, y}
+	canvas = BACanvas{setting}
+
+	return canvas, setting, nil
 }
 
 //////////////////////////////
@@ -164,6 +169,7 @@ func OpenCanvas(minerAddr string, privKey ecdsa.PrivateKey) (canvas Canvas, sett
 
 // The BACanvas object implements the Canvas interface.
 type BACanvas struct {
+	settings CanvasSettings
 }
 
 // AddShape adds a new shape to the canvas.
@@ -183,16 +189,53 @@ func (c BACanvas) AddShape(validateNum uint8, shapeType ShapeType, shapeSvgStrin
 		return
 	}
 
-	if p, ok := shape.(PathShape); ok {
+	if path, ok := shape.(PathShape); ok {
 		fmt.Println("Attempting to add a path element:")
-		fmt.Println(p)
+		fmt.Println(path)
+		if c.pathIsOutOfBounds(path) {
+			err = OutOfBoundsError{}
+			return
+		}
+
 	}
-	if c, ok := shape.(CircleShape); ok {
+	if circ, ok := shape.(CircleShape); ok {
 		fmt.Println("Attemting to add a circle element:")
-		fmt.Println(c)
+		fmt.Println(circ)
+		if c.circleIsOutOfBounds(circ) {
+			err = OutOfBoundsError{}
+			return
+		}
 	}
 
 	return
+}
+
+func (c BACanvas) circleIsOutOfBounds(circ CircleShape) bool {
+	x, y := float64(c.settings.CanvasXMax), float64(c.settings.CanvasYMax)
+	oo := Point2d{circ.r, circ.r}
+	xy := Point2d{x - circ.r, y - circ.r}
+	return pointIsOutOfBounds(circ.center(), oo, xy)
+}
+
+func (c BACanvas) pathIsOutOfBounds(path PathShape) bool {
+	x, y := float64(c.settings.CanvasXMax), float64(c.settings.CanvasYMax)
+	oo := Point2d{}
+	xy := Point2d{x, y}
+	for _, point := range path.components.points() {
+		if pointIsOutOfBounds(point, oo, xy) {
+			return true
+		}
+	}
+	return false
+}
+
+// is the point 'p' outside the rectangle spanned by the two points 'oo' and 'xy'
+// assuming oo.x < xy.x and oo.y < xy.y
+func pointIsOutOfBounds(p, oo, xy Point2d) bool {
+	if (p.x >= oo.x && p.x <= xy.x) && (p.y >= oo.y && p.y <= xy.y) {
+		return false
+	}
+	return true
 }
 
 // GetSvgString returns the encoding of the shape as an svg string.

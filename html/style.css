@@ -55,3 +55,9 @@ body {
 .shapeimg:hover {
     border: solid 1px black;
 }
+#keycontents {
+    width: 75px;
+    float: right;
+    display: flex;
+    flex-direction: column;
+}

@@ -3,6 +3,31 @@ window.onload = function(){
     exampleSocket.onmessage = receiveBlock
     document.getElementById("canvas").addEventListener("click", clickedCanvas)
     document.addEventListener('keypress', keyPressed)
+    scaleCanvas()
+    sizeKeyTA()
+}
+function sizeKeyTA() {
+    document.getElementById("keyTA").style.height = document.getElementById("keyTA").scrollHeight+'px';
+}
+function scaleCanvas() {
+    canvas = document.getElementById("canvas")
+    ctx = canvas.getContext("2d")
+    cvsWidth = canvas.width
+    cvsHeight = canvas.height
+    ctx.scale(cvsWidth/1024, cvsHeight/1024)
+
+}
+function scaleX(x) {
+    canvas = document.getElementById("canvas")
+    ctx = canvas.getContext("2d")
+    cvsWidth = canvas.width
+    return x * 1024 / cvsWidth
+}
+function scaleY(y) {
+    canvas = document.getElementById("canvas")
+    ctx = canvas.getContext("2d")
+    cvsHeight = canvas.height
+    return y * 1024 / cvsHeight
 }
 function keyPressed(event) {
     if (event.keyCode == 13) {
@@ -15,6 +40,8 @@ function clickedCanvas(event) {
     canvas = document.getElementById("canvas")
     x -= canvas.offsetLeft;
     y -= canvas.offsetTop;
+    x = scaleX(x).toFixed()
+    y = scaleY(y).toFixed()
     var command
     var type = document.getElementById("shapetype").value
     if (type === "Path") {
@@ -38,16 +65,16 @@ function setShape(shape) {
     var d = ""
     switch (shape) {
         case 'square':
-            d = "h 20 v 20 h -20 z"
+            d = "h 50 v 50 h -50 z"
             break;
         case 'triangle':
-            d = "h 20 l -10 -17 z"
+            d = "h 50 l -25 -43 z"
             break;
         case 'smiley': 
-            d = "v 7 h 20 v -7 m -13 -5 l 0 -7 m 6 0 l 0 7"
+            d = "v 18 h 50 v -18 m -33 -12.5 l 0 -18 m 15 0 l 0 18"
             break;
         case 'cross':
-            d = "l 20 20 m -20 0 l 20 -20"
+            d = "l 50 50 m -50 0 l 50 -50"
             break;
     }
     var dinput = document.getElementById("dinput")
@@ -93,6 +120,7 @@ function post(shape) {
                     return
                 }
                 drawInput()
+                clearDinput()
             })})
         .catch(function(res){ console.log(res) })
 }
@@ -117,7 +145,7 @@ function drawInput() {
         cx = parseInt(args[0])
         cy = parseInt(args[1])
         r = parseInt(args[2])
-        ctx.arc(cx, cy, r, 0,2 * Math.PI);                
+        ctx.arc(cx, cy, r, 0, 2 * Math.PI);                
         ctx.stroke()
         ctx.fill()
     }
