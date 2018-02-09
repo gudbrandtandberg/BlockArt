@@ -2,6 +2,12 @@ window.onload = function(){
     var exampleSocket = new WebSocket("ws://127.0.0.1:8080/registerws")
     exampleSocket.onmessage = receiveBlock
     document.getElementById("theCanvas").addEventListener("click", clickedCanvas)
+    document.addEventListener('keypress', keyPressed)
+}
+function keyPressed(event) {
+    if (event.keyCode == 13) {
+        submitDrawRequest()
+    }
 }
 function clickedCanvas(event) {
     var x = event.clientX
@@ -17,7 +23,12 @@ function clickedCanvas(event) {
     } else {
         command = x + ", " + y + ", "
     }
-    document.getElementById("dinput").value = command
+    var dinput = document.getElementById("dinput")
+    var val = dinput.value
+    dinput.value = val + " " + command
+}
+function clearDinput() {
+    document.getElementById("dinput").value = ""
 }
 function receiveBlock(event) {
     var command = JSON.parse(event.data)
