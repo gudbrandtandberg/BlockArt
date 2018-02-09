@@ -1,12 +1,12 @@
 window.onload = function(){
     var exampleSocket = new WebSocket("ws://127.0.0.1:8080/registerws")
     exampleSocket.onmessage = receiveBlock
-    document.getElementById("myCanvas").addEventListener("click", clickedCanvas)
+    document.getElementById("theCanvas").addEventListener("click", clickedCanvas)
 }
 function clickedCanvas(event) {
     var x = event.clientX
     var y = event.clientY
-    canvas = document.getElementById("myCanvas")
+    canvas = document.getElementById("theCanvas")
     x -= canvas.offsetLeft;
     y -= canvas.offsetTop;
     var command
@@ -46,7 +46,7 @@ function setShape(shape) {
 }
 function drawCommand(command) {
     d = command.SVGString
-    var canvas = document.getElementById('myCanvas');
+    var canvas = document.getElementById('theCanvas');
     var ctx = canvas.getContext('2d');
     var p = new Path2D(d);
     ctx.fillStyle = command.Fill
@@ -88,7 +88,7 @@ function drawInput() {
     var fill = document.getElementById("fill").value;
     var shapetype = document.getElementById("shapetype").value;
 
-    var canvas = document.getElementById('myCanvas');
+    var canvas = document.getElementById('theCanvas');
     var ctx = canvas.getContext('2d');
     ctx.fillStyle = fill
     ctx.strokeStyle = stroke

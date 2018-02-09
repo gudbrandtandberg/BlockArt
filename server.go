@@ -127,8 +127,8 @@ func readConfigOrDie(path string) {
 
 // These variables control whether we should be working with the webserver
 const (
-	BROADCAST = false
-	GENERATE  = false
+	BROADCAST = true
+	GENERATE  = true
 )
 
 // Parses args, setups up RPC server.
@@ -182,8 +182,8 @@ func monitor(k string, heartBeatInterval time.Duration) {
 			fmt.Println("timed out",
 				int64(time.Now().UnixNano()),
 				int64(allMiners.all[k].RecentHeartbeat),
-					int64(heartBeatInterval),
-						allMiners.all[k].Address.String())
+				int64(heartBeatInterval),
+				allMiners.all[k].Address.String())
 			delete(allMiners.all, k)
 			allMiners.Unlock()
 			return
