@@ -6,6 +6,11 @@
 package main
 
 import (
+	"crypto/ecdsa"
+	"crypto/elliptic"
+	"crypto/rand"
+	"crypto/x509"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"html/template"
@@ -24,12 +29,22 @@ type cvsData struct {
 	PageTitle string
 	CVSWidth  string
 	CVSHeight string
+	Key       string
 }
 
 func serveIndex(w http.ResponseWriter, req *http.Request) {
 	fmt.Println("Serving index")
 	w.Header().Set("Access-Control-Allow-Origin", "*")
-	data := cvsData{PageTitle: "BlockArt Drawing Server", CVSWidth: "512", CVSHeight: "512"}
+
+	curve := elliptic.P384()
+	key, err := ecdsa.GenerateKey(curve, rand.Reader)
+
+	bytes, err := x509.MarshalECPrivateKey(key)
+
+	keyString := hex.EncodeToString(bytes)
+
+	data := cvsData{PageTitle: "BlockArt Drawing Server", CVSWidth: "450", CVSHeight: "450", Key: keyString}
+
 	tmpl, err := template.ParseFiles("html/index.html")
 	if err != nil {
 		fmt.Println(err)
@@ -141,32 +156,4 @@ func main() {
 // 	SVGString string
 // 	Fill      string
 // 	Stroke    string
-// }
-
-// // Area is a way of computing area from Path object
-// func (p Path) Area() float64 {
-// 	parser := blockartlib.NewSVGParser()
-// 	components, err := parser.Parse(p.SVGString)
-// 	if err != nil {
-// 		log.Fatal(err)
-// 	}
-
-// 	if p.Fill != "transparent" { // closed path
-// 		return blockartlib.ShapeArea(components[0])
-// 	}
-// 	return blockartlib.LineArea(components) // open path
-// }
-
-// // Intersects checks if two paths intersect
-// func Intersects(p1, p2 Path) bool {
-// 	parser := blockartlib.NewSVGParser()
-// 	c1, err := parser.Parse(p1.SVGString)
-// 	if err != nil {
-// 		log.Fatal(err)
-// 	}
-// 	c2, err := parser.Parse(p2.SVGString)
-// 	if err != nil {
-// 		log.Fatal(err)
-// 	}
-// 	return blockartlib.Intersects(c1, c2)
 // }

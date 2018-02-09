@@ -1,0 +1,57 @@
+h1 {
+    color:  rgb(110, 20, 110);
+    margin-top: 0;
+}
+body {
+    margin: 0 0;
+    height: 100%;
+}
+#container {
+    display: flex;
+    flex-direction: row;
+    max-height: 100%;
+}
+.box {
+    padding: 10px;
+    height: 100%;
+    flex-grow: 1;
+}
+#command {
+    flex-grow: 1;
+    margin-left: 10px;
+}
+#blockchain {
+    flex-grow: 2;
+}
+#key {
+    flex-grow: 1;
+}
+#keyTA {
+    float: right;
+}
+#bcimg {
+    height: 600px;
+}
+#inputtable {
+    width: 50%;
+}
+#inputpane {
+    display: flex;
+    flex-direction: row;
+    margin-bottom: 2px;
+}
+#left {
+    
+}
+#right {
+    width: 180px;
+}
+.shapeimg {
+    width: 32px;
+    height: 32px;
+    border: solid 1px transparent;
+    margin: 2px 2px;
+}
+.shapeimg:hover {
+    border: solid 1px black;
+}

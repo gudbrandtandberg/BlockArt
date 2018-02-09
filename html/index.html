@@ -5,89 +5,114 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     
     <title>BlockArt Drawing Server</title>
-    <style type="text/css"> 
-        h1 {
-            color:  magenta
-            
-        }
-        body {
-            width: 600px;
-            margin: 0 auto;
-        }
-        #input {
-            width: 300px;
-        }
-    </style>
+    <link rel="stylesheet" href="style.css">
 
 </head>
 
 <body>
-    <h1>{{.PageTitle}}</h1>
 
-    <p>
-        Enter SVG command below:
-    </p>
+    <div id="container">
 
-    <table style="width: 80%">
-        <tr>
-            <td>
-                SVGString:
-            </td>
-            <td>
-                <input type="text" id="dinput" value="">
-            </td>
-        </tr>
-        <tr>
-            <td>
-                shapetype:
-            </td>
-            <td>
-                <select id="shapetype">
-                    <option>Path</option>
-                    <option>Circle</option>
-                </select>
-            </td>
-        </tr>
-        <tr>
-            <td>
-                fill:
-            </td>
-            <td>
-                <select id="fill">
-                    <option>transparent</option>
-                    <option>black</option>
-                    <option>blue</option>
-                    <option>red</option>
-                    <option>green</option>
-                    <option>yellow</option>
-                </select>
-            </td>
-        </tr>
-        <tr>
-            <td>
-                stroke:
-            </td>
-            <td>
-                <select id="stroke">
-                    <option>transparent</option>
-                    <option>black</option>
-                    <option>blue</option>
-                    <option>red</option>
-                    <option>green</option>
-                    <option>yellow</option>
-                </select>
-            </td>
-        </tr>
-        <tr>
-            <td align="left">
-                <button onclick="submitDrawRequest()">Submit</button>
-            </td>
-        </tr>
-    </table>
+        <div id="command" class="box">
+            <div id="commandcontents">
+                <h1>{{.PageTitle}}</h1>
 
-    <p id="text"></p>
-    
-    <canvas id="myCanvas" width="{{.CVSWidth}}" height="{{.CVSHeight}}" style="border:2px solid #361a1a;">.</canvas>
+                <div id="inputpane">
+                    <div id="left">
+                        <table id="inputtable">
+                            <tr>
+                                <td>
+                                    SVGString:
+                                </td>
+                                <td>
+                                    <input type="text" id="dinput" value="">
+                                </td>
+                            </tr>
+                            <tr>
+                                <td>
+                                    Shape type:
+                                </td>
+                                <td>
+                                    <select id="shapetype">
+                                        <option>Path</option>
+                                        <option>Circle</option>
+                                    </select>
+                                </td>
+                            </tr>
+                            <tr>
+                                <td>
+                                    Fill:
+                                </td>
+                                <td>
+                                    <select id="fill">
+                                        <option selected="selected">transparent</option>
+                                        <option>black</option>
+                                        <option>blue</option>
+                                        <option>red</option>
+                                        <option>green</option>
+                                        <option>yellow</option>
+                                    </select>
+                                </td>
+                            </tr>
+                            <tr>
+                                <td>
+                                    Stroke:
+                                </td>
+                                <td>
+                                    <select id="stroke">
+                                        <option>transparent</option>
+                                        <option selected="selected">black</option>
+                                        <option>blue</option>
+                                        <option>red</option>
+                                        <option>green</option>
+                                        <option>yellow</option>
+                                    </select>
+                                </td>
+                            </tr>
+                            <tr>
+                                <td>
+                                    Server address: 
+                                </td>
+                                <td>
+                                    <input type="text" id="serveraddr" value="127.0.0.1:4444" style="width: ">
+                                </td>
+                            </tr>
+                            <tr>
+                                <td align="">
+                                    <button onclick="submitDrawRequest()">Submit</button>
+                                </td>
+                            </tr>
+                            
+                        </table>
+                    </div>
+                    <div id="right">
+                        <img class="shapeimg" src="sq.png" onclick="setShape('square')">
+                        <img class="shapeimg" src="tr.png" onclick="setShape('triangle')">
+                        <img class="shapeimg" src="sm.png" onclick="setShape('smiley')">
+                        <img class="shapeimg" src="cr.png" onclick="setShape('cross')">
+                    </div>
+                </div>
+                <canvas id="myCanvas" width="{{.CVSWidth}}" height="{{.CVSHeight}}" style="border:2px solid #361a1a;">.</canvas>
+
+            </div>
+        </div>
+
+        <div id="blockchain" class="box">
+            <div id="blockchaincontents">
+                <h1>
+                    The Blockchain
+                </h1>
+                <img id="bcimg" src="blockchain.jpg">
+            </div>
+        </div>
+        
+        <div id="key" class="box">
+            <div id="keycontents">
+                <textarea id="keyTA" cols="8" rows="38" style="resize: none">{{.Key}}</textarea>
+            </div>
+        </div>
+
+    </div>
 
     <script src="client.js"></script>
 

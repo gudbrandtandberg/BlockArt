@@ -1,10 +1,48 @@
 window.onload = function(){
     var exampleSocket = new WebSocket("ws://127.0.0.1:8080/registerws")
-    exampleSocket.onmessage = function (event) {
-        var command = JSON.parse(event.data)
-        console.log("Received command from webserver")
-        drawCommand(command)
-        }
+    exampleSocket.onmessage = receiveBlock
+    document.getElementById("myCanvas").addEventListener("click", clickedCanvas)
+}
+function clickedCanvas(event) {
+    var x = event.clientX
+    var y = event.clientY
+    canvas = document.getElementById("myCanvas")
+    x -= canvas.offsetLeft;
+    y -= canvas.offsetTop;
+    var command
+    var type = document.getElementById("shapetype").value
+    console.log(type)
+    if (type === "Path") {
+        command = "M " + x + " " + y
+    } else {
+        command = x + ", " + y + ", "
+    }
+    document.getElementById("dinput").value = command
+}
+function receiveBlock(event) {
+    var command = JSON.parse(event.data)
+    console.log("Received command from webserver")
+    drawCommand(command)
+}
+function setShape(shape) {
+    var d = ""
+    switch (shape) {
+        case 'square':
+            d = "h 20 v 20 h -20 z"
+            break;
+        case 'triangle':
+            d = "h 20 l -10 -17 z"
+            break;
+        case 'smiley': 
+            d = "v 7 h 20 v -7 m -13 -5 l 0 -7 m 6 0 l 0 7"
+            break;
+        case 'cross':
+            d = "l 20 20 m -20 0 l 20 -20"
+            break;
+    }
+    var dinput = document.getElementById("dinput")
+    var val = dinput.value
+    dinput.value = val + " " + d
 }
 function drawCommand(command) {
     d = command.SVGString
