@@ -15,7 +15,7 @@ __ink-mining__ network. A user connects to a miner using the miner's private key
 Miners are responsible for issuing commands on behalf of connected clients, as well as disseminating and validating
 all operations on the distributed blockchain. 
 
-![The network topology](html/img/Network.png])
+![The network topology](html/img/Network.png)
 
 ## Graphics
 
