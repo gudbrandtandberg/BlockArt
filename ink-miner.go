@@ -355,7 +355,7 @@ func main() {
 
 func block2hash (block *Block) string {
 	hasher := md5.New()
-	hasher.Write([]byte(block2string(block) + block.Nonce))
+	hasher.Write([]byte(block2string(block)))
 	return hex.EncodeToString(hasher.Sum(nil))
 }
 
