@@ -367,7 +367,7 @@ func main() {
 	// fmt.Println(h, h.PrevHash, genesisBlock)
 
 	// Listen incoming RPC calls from artnodes
-	listenForClients()
+	listenForArtNodes()
 
 	// Heartbeat server
 	// for {
@@ -380,13 +380,18 @@ func main() {
 
 type RMiner int
 
-func (m *RMiner) OpenCanvas(args string, reply *int) error {
+func (m *RMiner) OpenCanvas(args string, reply *string) error {
 	fmt.Println("New ArtNode connecting")
 
 	return nil
 }
 
-func listenForClients() {
+func (m *RMiner) AddShape(args string, reply *string) error {
+
+	return nil
+}
+
+func listenForArtNodes() {
 
 	artServer := rpc.NewServer()
 	rminer := new(RMiner)

@@ -8,7 +8,6 @@ package blockartlib
 import (
 	"crypto/ecdsa"
 	"fmt"
-	"net"
 	"net/rpc"
 )
 
@@ -134,23 +133,6 @@ func (e InvalidBlockHashError) Error() string {
 ////////////////////////////////////////////////////////////////////////////////////////////
 // <ART NODE 2 MINER IMPLEMENTATION>
 
-type ArtNodeToMinerInterface interface {
-	OpenCanvas()
-}
-
-type Art2Miner struct {
-}
-
-type ArtNode struct {
-	minerClient *rpc.Client
-	localAddr   net.Addr
-}
-
-func (a2m *Art2Miner) OpenCanvas() {
-
-}
-
-var art2miner Art2Miner
 var minerClient *rpc.Client
 
 // </ART NOTE 2 MINER IMPLEMENTATION>
@@ -183,10 +165,11 @@ type Canvas interface {
 // - DisconnectedError
 func OpenCanvas(minerAddr string, privKey ecdsa.PrivateKey) (canvas Canvas, setting CanvasSettings, err error) {
 
-	minerClient, err := rpc.Dial("tcp", minerAddr)
+	client, err := rpc.Dial("tcp", minerAddr)
 	if err != nil {
 		return
 	}
+	minerClient = client
 
 	err = minerClient.Call("RMiner.OpenCanvas", "", nil)
 	if err != nil {
@@ -244,6 +227,13 @@ func (c BACanvas) AddShape(validateNum uint8, shapeType ShapeType, shapeSvgStrin
 		}
 	}
 
+	// local checks done, query miner
+	err = minerClient.Call("RMiner.AddShape", "", nil)
+	if err != nil {
+		return
+	}
+
+	fmt.Println("everything went well")
 	return
 }
 

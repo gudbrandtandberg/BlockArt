@@ -65,7 +65,7 @@ func main() {
 	if checkError(err) != nil {
 		return
 	}
-
+	return
 	// Add two lines.
 	_, _, _, err = canvas.AddShape(validateNum, blockartlib.PATH, "M 0 0 L 0 5 M 0 1 h 5", "transparent", "red")
 	if checkError(err) != nil {
