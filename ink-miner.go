@@ -74,7 +74,7 @@ type IMinerInterface interface {
 
 	// Just a disconnected error? other errors will be handled by methods called within mine
 
-	Mine(<-chan Operation, <-chan Block) (chan<- Block, error)
+	Mine(chan Operation, chan Block) (chan Block, error)
 }
 
 type BlockInterface interface {}
@@ -268,22 +268,6 @@ func (ink IMiner) Mine(newOps chan Operation, newBlock chan Block) (foundBlock c
 			}
 		}
 	}()
-
-	//ink.currentBlock.Ops = bufferedOps // TODO: will this break everything?
-	//
-	//for i = 0; i < math.MaxUint64; i++ {
-	//	nonce := strconv.FormatUint(i, 10)
-	//	difficulty := ink.settings.PoWDifficultyNoOpBlock
-	//	if len(ink.currentBlock.Ops) != 0 {
-	//		difficulty = ink.settings.PoWDifficultyOpBlock
-	//	}
-	//	if validateNonce(ink.currentBlock, nonce, difficulty) {
-	//		// Broadcast nonce
-	//		log.Println(nonce)
-	//		ink.Mine() // Burn the CPU
-	//	}
-	//}
-	// log.Println("This should not happen")
 	return foundBlock, nil
 }
 
