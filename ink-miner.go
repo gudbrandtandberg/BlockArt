@@ -117,6 +117,12 @@ type Block struct {
 	Nonce string
 }
 
+type BlockNode struct {
+	Block Block
+	Children []BlockNode
+	Parent BlockNode
+}
+
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////
 //								END OF STRUCTS, START OF METHODS											 //
