@@ -26,7 +26,6 @@ import (
 	"math"
 	"strconv"
 	"log"
-	"os/user"
 )
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -108,9 +107,8 @@ type IMiner struct {
 type Block struct {
 	PrevHash string
 	Ops []Operation
-	InkTransaction int32
 	MinedBy ecdsa.PublicKey
-	Nonce uint32
+	Nonce string
 }
 
 type Operation struct {
@@ -118,11 +116,11 @@ type Operation struct {
 	owner ecdsa.PublicKey
 }
 
-type BlockNode struct {
+/*type BlockNode struct {
 	Block Block
 	Children []BlockNode
 	Parent BlockNode
-}
+}*/
 
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -230,45 +228,43 @@ func (m2s *MinerToServer) HeartbeatServer() (err error) {
 	return
 }
 
-func (ink IMiner) Mine(newOps <-chan Operation, newBlock <-chan Block) (foundBlock chan<- Block, err error) {
+func (ink IMiner) Mine(newOps chan Operation, newBlock chan Block) (foundBlock chan Block, err error) {
 	foundBlock = make(chan Block)
 	var i uint64 = 0
-	prevBlock := <-newBlock
-	prevHash := block2hash(&prevBlock)
-	opQueue := make([]Operation, 10, 10)
-	currentBlock := Block{PrevHash: prevHash, InkTransaction: 1, MinedBy: ink.key.PublicKey} // TODO: change inkTransaction
-	currentBlockOps := make([]Operation, 10, 10)
-	nonce := strconv.FormatUint(i, 10)
+	opQueue := make([]Operation, 0)
 	difficulty := ink.settings.PoWDifficultyNoOpBlock
+
+	var currentBlock Block
 
 	go func() {
 		for {
 			select {
-				case b := <-newBlock:
-					prevBlock = b
-					prevHash = block2hash(&prevBlock)
-					currentBlockOps = append(currentBlockOps, opQueue...)
-					opQueue = make([]Operation, 10, 10)
-					difficulty = ink.settings.PoWDifficultyNoOpBlock
-					if len(currentBlockOps) != 0 {
-						difficulty = ink.settings.PoWDifficultyOpBlock
-					}
-					i = 0
+			case b := <-newBlock:
+				currentBlock = Block{
+					PrevHash: block2hash(&b),
+					MinedBy:  ink.key.PublicKey,
+					Ops:      append(currentBlock.Ops, opQueue...),
+				}
+				opQueue = make([]Operation, 0)
+				difficulty = ink.settings.PoWDifficultyNoOpBlock
+				if len(currentBlock.Ops) != 0 {
+					difficulty = ink.settings.PoWDifficultyOpBlock
+				}
+				i = 0
 
-				case o := <-newOps:
-					opQueue = append(opQueue, o)
+			case o := <-newOps:
+				opQueue = append(opQueue, o)
 
-				case validateNonce(&currentBlock, nonce, difficulty):
+			default:
+				i++
+				currentBlock.Nonce = strconv.FormatUint(i, 10)
+				if validateBlock(&currentBlock, difficulty) {
 					// successfully found nonce
-					log.Printf("found nonce: %s", nonce)
-					foundBlock <- currentBlock // spit out the found block via channel
-					prevBlock = currentBlock
-					prevHash = block2hash(&prevBlock)
+					log.Printf("found nonce: %s", currentBlock.Nonce)
+					foundBlock <- currentBlock                                                            // spit out the found block via channel
+					currentBlock = Block{PrevHash: block2hash(&currentBlock), MinedBy: ink.key.PublicKey} // TODO: change inkTransaction
 					i = 0
-
-				default:
-					i++
-					nonce = strconv.FormatUint(i, 10)
+				}
 			}
 		}
 	}()
@@ -372,15 +368,21 @@ func main() {
 	miner2server.Register()
 	err = miner2server.GetNodes()
 
-	genesisBlock := &Block{
+	genesisBlock := Block{
 		PrevHash: ink.settings.GenesisBlockHash,
 		MinedBy: priv.PublicKey,
 	}
-	ink.currentBlock = genesisBlock
 
 	fmt.Println(err, ink.neighbours)
 
-	go ink.Mine()
+	newOpsCH := make(chan Operation)
+	newBlockCH := make(chan Block)
+	foundBlockCH, err := ink.Mine(newOpsCH, newBlockCH)
+
+	newBlockCH <- genesisBlock
+
+	h := <-foundBlockCH
+	fmt.Println(h, h.PrevHash, genesisBlock)
 
 	// Heartbeat server
 	for {
@@ -410,11 +412,6 @@ func block2string(block *Block) string {
 	return string(res1B)
 }
 
-func validateBlock(block *Block, nonce string, difficulty uint8) bool {
-	return validateNonce(block, nonce, difficulty)
-}
-
-func validateNonce(block *Block, nonce string, difficulty uint8) bool {
-	block.Nonce = nonce
+func validateBlock(block *Block, difficulty uint8) bool {
 	return strings.HasSuffix(block2hash(block), strings.Repeat("0", int(difficulty)))
 }
