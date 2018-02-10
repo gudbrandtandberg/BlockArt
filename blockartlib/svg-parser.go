@@ -321,10 +321,32 @@ func (l Line2d) length() float64 {
 	return math.Sqrt(math.Pow(l.b.x-l.a.x, 2) + math.Pow(l.b.y-l.a.y, 2))
 }
 
-// IsOutOfBounds is true if the 'shape' overflows the canvas,
-// as described by 'w' and 'h'
-func IsOutOfBounds(shape Shape, w, h float64) bool {
+func (c BACanvas) circleIsOutOfBounds(circ CircleShape) bool {
+	x, y := float64(c.settings.CanvasXMax), float64(c.settings.CanvasYMax)
+	oo := Point2d{circ.r, circ.r}
+	xy := Point2d{x - circ.r, y - circ.r}
+	return pointIsOutOfBounds(circ.center(), oo, xy)
+}
+
+func (c BACanvas) pathIsOutOfBounds(path PathShape) bool {
+	x, y := float64(c.settings.CanvasXMax), float64(c.settings.CanvasYMax)
+	oo := Point2d{}
+	xy := Point2d{x, y}
+	for _, point := range path.components.points() {
+		if pointIsOutOfBounds(point, oo, xy) {
+			return true
+		}
+	}
 	return false
+}
+
+// is the point 'p' outside the rectangle spanned by the two points 'oo' and 'xy'
+// assuming oo.x < xy.x and oo.y < xy.y
+func pointIsOutOfBounds(p, oo, xy Point2d) bool {
+	if (p.x >= oo.x && p.x <= xy.x) && (p.y >= oo.y && p.y <= xy.y) {
+		return false
+	}
+	return true
 }
 
 // Intersects is true if the 'shape1' and 'shape2' intersect

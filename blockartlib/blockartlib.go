@@ -128,6 +128,22 @@ func (e InvalidBlockHashError) Error() string {
 ////////////////////////////////////////////////////////////////////////////////////////////
 
 ////////////////////////////////////////////////////////////////////////////////////////////
+// <ART NODE 2 MINER IMPLEMENTATION>
+
+type ArtNodeToMinerInterface interface {
+	OpenCanvas()
+}
+
+type Art2Miner struct{}
+
+func (a *Art2Miner) OpenCanvas() {
+
+}
+
+// </ART NOTE 2 MINER IMPLEMENTATION>
+////////////////////////////////////////////////////////////////////////////////////////////
+
+////////////////////////////////////////////////////////////////////////////////////////////
 // <CANVAS IMPLEMENTATION>
 
 // A Canvas represents a canvas in the system.
@@ -208,34 +224,6 @@ func (c BACanvas) AddShape(validateNum uint8, shapeType ShapeType, shapeSvgStrin
 	}
 
 	return
-}
-
-func (c BACanvas) circleIsOutOfBounds(circ CircleShape) bool {
-	x, y := float64(c.settings.CanvasXMax), float64(c.settings.CanvasYMax)
-	oo := Point2d{circ.r, circ.r}
-	xy := Point2d{x - circ.r, y - circ.r}
-	return pointIsOutOfBounds(circ.center(), oo, xy)
-}
-
-func (c BACanvas) pathIsOutOfBounds(path PathShape) bool {
-	x, y := float64(c.settings.CanvasXMax), float64(c.settings.CanvasYMax)
-	oo := Point2d{}
-	xy := Point2d{x, y}
-	for _, point := range path.components.points() {
-		if pointIsOutOfBounds(point, oo, xy) {
-			return true
-		}
-	}
-	return false
-}
-
-// is the point 'p' outside the rectangle spanned by the two points 'oo' and 'xy'
-// assuming oo.x < xy.x and oo.y < xy.y
-func pointIsOutOfBounds(p, oo, xy Point2d) bool {
-	if (p.x >= oo.x && p.x <= xy.x) && (p.y >= oo.y && p.y <= xy.y) {
-		return false
-	}
-	return true
 }
 
 // GetSvgString returns the encoding of the shape as an svg string.

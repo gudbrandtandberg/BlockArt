@@ -119,6 +119,7 @@ function post(shape) {
                     alert(response["Status"])
                     return
                 }
+                console.log(response)
                 drawInput()
                 clearDinput()
             })})
