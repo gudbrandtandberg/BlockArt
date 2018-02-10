@@ -162,7 +162,14 @@ func (m2m *MinerToMiner) ConnectToNeighbour() (err error) {
 	return
 }
 
-func (m2m *MinerToMiner) FloodToPeers(Block) (err error) {
+func (m2m *MinerToMiner) FloodToPeers(block *Block) (err error) {
+	fmt.Println("Sent", block.Nonce, block2hash(block))
+
+	for _, neighbour := range ink.neighbours {
+		var reply bool
+		err = neighbour.Call("MinerToMiner.ReceiveBlock", &block, &reply)
+		fmt.Println(err, reply)
+	}
 	return
 }
 
@@ -177,18 +184,20 @@ func (m2m *MinerToMiner) RegisterNeighbour() (err error) {
 	return
 }
 func (m2m *MinerToMiner) ReceiveBlock(block *Block, reply *bool) (err error) {
+	fmt.Println("Received", block.Nonce, block2hash(block))
+
 	difficulty := ink.settings.PoWDifficultyNoOpBlock
 	if len(block.Ops) != 0 {
 		difficulty = ink.settings.PoWDifficultyOpBlock
 	}
 	if validateBlock(block, difficulty) {
-		blockNode.GetHeads()
-		for head in heads {
-			if head == block.prevHash {
-
+		for _, head := range ink.getBlockChainHeads() {
+			if block2hash(&head.Block) == block.PrevHash {
+				newBlockCH <- *block
+			} else {
+				log.Println("tsk tsk Received block does not append to a head")
 			}
 		}
-		newBlockCH <- block
 	}
 
 	return
@@ -316,7 +325,17 @@ func (ink IMiner) Mine() (err error) {
 }
 
 func (ink IMiner) getBlockChainHeads() (heads []BlockNode) {
-	
+	heads = make([]BlockNode, 0, math.MaxUint16)
+	nodesToCheck := make([]BlockNode, 0, math.MaxUint32)
+	for len(nodesToCheck) > 0 {
+		var node BlockNode = nodesToCheck[0]
+		if len(node.Children) == 0 {
+			heads = append(heads, node)
+		} else {
+			nodesToCheck = append(nodesToCheck, node.Children...)
+		}
+	}
+	return
 }
 
 var ink IMiner
@@ -431,6 +450,12 @@ func main() {
 	genesisNode.Children = append(genesisNode.Children, newNode)
 	fmt.Println(h, h.PrevHash, genesisBlock)
 
+	go func() {
+		for {
+			minedBlock := <- foundBlockCH
+			miner2miner.FloodToPeers(&minedBlock)
+		}
+	}()
 	// Heartbeat server
 	for {
 		go miner2server.HeartbeatServer()
