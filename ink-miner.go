@@ -19,6 +19,15 @@ import (
 	"encoding/gob"
 	"net"
 	"crypto/rand"
+	"bytes"
+	"reflect"
+	"encoding/json"
+	"crypto/md5"
+	"encoding/hex"
+	"strings"
+	"math"
+	"strconv"
+	"log"
 )
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -93,10 +102,17 @@ type IMiner struct {
 	key ecdsa.PrivateKey
 }
 
+type Operation struct {
+	svg string
+	owner ecdsa.PublicKey
+}
 
-
-
-
+type Block struct {
+	prevHash string
+	minedBy ecdsa.PublicKey
+	ops []Operation
+	nonce string
+}
 
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -252,8 +268,7 @@ func main() {
 		localAddr: l,
 		neighbours: make(map[net.Addr]*rpc.Client),
 	}
-
-
+	
 	// Register with server
 	miner2server.Register()
 	err = miner2server.GetNodes()
@@ -267,4 +282,43 @@ func main() {
 
 		time.Sleep(time.Millisecond * 50)
 	}
+}
+
+///////////////////////////////////////////////////////////////////////////////////////////////////////////////
+//								END OF METHODS, START OF MINING											 //
+///////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+func block2string(block Block) string {
+	res1B, err := json.Marshal(block)
+	if err != nil {
+		log.Println(err)
+		return ""
+	}
+	return string(res1B)
+}
+
+func mineBlock(block Block, difficulty int) string {
+	var i uint64
+	stringBlock := block2string(block)
+
+	for i = 0; i < math.MaxUint64; i++ {
+		nonce := strconv.FormatUint(i, 10)
+
+		if validateNonce(stringBlock, nonce, difficulty) {
+			return nonce
+		}
+	}
+	return ""
+}
+
+func validateBlock(block Block, nonce string, difficulty int) bool {
+	return validateNonce(block2string(block), nonce, difficulty)
+}
+
+func validateNonce(stringBlock string, nonce string, difficulty int) bool {
+	hasher := md5.New()
+	hasher.Write([]byte(stringBlock + nonce))
+	hash := hex.EncodeToString(hasher.Sum(nil))
+
+	return strings.HasSuffix(hash, strings.Repeat("0", difficulty))
 }
