@@ -19,6 +19,13 @@ import (
 	"encoding/gob"
 	"net"
 	"crypto/rand"
+	"encoding/json"
+	"crypto/md5"
+	"encoding/hex"
+	"strings"
+	"math"
+	"strconv"
+	"log"
 )
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -90,13 +97,31 @@ type IMiner struct {
 	localAddr net.Addr
 	neighbours map[net.Addr]*rpc.Client
 
+	settings MinerNetSettings
+
+	tails []*Block
+	currentBlock *Block
+
 	key ecdsa.PrivateKey
 }
 
+type Operation struct {
+	svg string
+	owner ecdsa.PublicKey
+}
 
+type Block struct {
+	PrevHash string
+	MinedBy ecdsa.PublicKey
+	Ops []Operation
+	Nonce string
+}
 
-
-
+type BlockNode struct {
+	Block Block
+	Children []BlockNode
+	Parent BlockNode
+}
 
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -111,7 +136,9 @@ func (m2m *MinerToMiner) FloodToPeers() (err error) {
 	return
 }
 
-func (m2m2 *MinerToMiner) ListenHB(inc string, out *string) (err error) {}
+func (m2m2 *MinerToMiner) ListenHB(inc string, out *string) (err error) {
+	return
+}
 
 func (m2m *MinerToMiner) HeartbeatNeighbours() (err error) {
 	return
@@ -170,13 +197,16 @@ func (m2s *MinerToServer) Register() (err error) {
 	}
 	var settings MinerNetSettings
 	err = ink.serverClient.Call("RServer.Register", m, &settings)
-	fmt.Println("Register", settings, err)
+	if err != nil {
+		return nil
+	}
+	ink.settings = settings;
 	return
 }
 
 // Makes RPC GetNodes(pubKey) call, makes a call to ConnectToNeighbour for each returned addr, can return errors
 func (m2s *MinerToServer) GetNodes() (err error) {
-	minerAddresses := make([]net.Addr, 0, 65535)
+	minerAddresses := make([]net.Addr, 0, math.MaxUint16)
 	err = ink.serverClient.Call("RServer.GetNodes", ink.key.PublicKey, &minerAddresses)
 
 	for _, addr := range minerAddresses {
@@ -195,17 +225,35 @@ func (m2s *MinerToServer) HeartbeatServer() (err error) {
 	var ignored bool
 	//client.Call("RServer.HeartBeat", nil, &ignored)
 	err = ink.serverClient.Call("RServer.HeartBeat", ink.key.PublicKey, &ignored)
-	fmt.Println("Sent HB:", ignored, err)
+//	fmt.Println("Sent HB:", ignored, err)
 	return
 }
 
 func (ink IMiner) Mine() (err error) {
-	return
+	var i uint64
+	ink.currentBlock.Ops = bufferedOps // TODO: will this break everything?
+
+	for i = 0; i < math.MaxUint64; i++ {
+		nonce := strconv.FormatUint(i, 10)
+		difficulty := ink.settings.PoWDifficultyNoOpBlock
+		if len(ink.currentBlock.Ops) != 0 {
+			difficulty = ink.settings.PoWDifficultyOpBlock
+		}
+		if validateNonce(ink.currentBlock, nonce, difficulty) {
+			// Broadcast nonce
+			log.Println(nonce)
+			ink.Mine() // Burn the CPU
+		}
+	}
+	log.Println("This should not happen")
+	return nil
 }
 
 var ink IMiner
 var miner2server MinerToServer
 var miner2miner MinerToMiner
+var blocks map[string]Block
+var bufferedOps []Operation
 
 func tmp() net.Addr {
 	server := rpc.NewServer()
@@ -231,6 +279,31 @@ func killFriends () {
 	}
 }
 
+func getBlockWithHash(hash string) *Block {
+	block, ok := blocks[hash]
+	if !ok {
+		// Get block from neighbours
+		// block = fromneighbour()
+	}
+	return &block
+}
+
+func getChildren (block *Block) []*Block {
+	hash := block2hash(block)
+	children := make([]*Block, 0, math.MaxUint16)
+	for _, b := range ink.tails {
+		for {
+			if b.PrevHash == hash {
+				children = append(children, b)
+				break
+			} else {
+				b = getBlockWithHash(b.PrevHash)
+			}
+		}
+	}
+	return children
+}
+
 func main() {
 	gob.Register(&net.TCPAddr{})
 	gob.Register(&elliptic.CurveParams{})
@@ -245,7 +318,7 @@ func main() {
 	client, err := rpc.Dial("tcp", *ipPort)
 
 	l := tmp()
-
+	bufferedOps = make([]Operation, 0, math.MaxUint16)
 	ink = IMiner{
 		serverClient: client,
 		key: *priv,
@@ -253,12 +326,19 @@ func main() {
 		neighbours: make(map[net.Addr]*rpc.Client),
 	}
 
-
 	// Register with server
 	miner2server.Register()
 	err = miner2server.GetNodes()
 
+	genesisBlock := &Block{
+		PrevHash: ink.settings.GenesisBlockHash,
+		MinedBy: priv.PublicKey,
+	}
+	ink.currentBlock = genesisBlock
+
 	fmt.Println(err, ink.neighbours)
+
+	go ink.Mine()
 
 	// Heartbeat server
 	for {
@@ -267,4 +347,32 @@ func main() {
 
 		time.Sleep(time.Millisecond * 50)
 	}
+}
+
+///////////////////////////////////////////////////////////////////////////////////////////////////////////////
+//								END OF METHODS, START OF MINING											 //
+///////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+func block2hash (block *Block) string {
+	hasher := md5.New()
+	hasher.Write([]byte(block2string(block)))
+	return hex.EncodeToString(hasher.Sum(nil))
+}
+
+func block2string(block *Block) string {
+	res1B, err := json.Marshal(*block)
+	if err != nil {
+		log.Println(err)
+		return ""
+	}
+	return string(res1B)
+}
+
+func validateBlock(block *Block, nonce string, difficulty uint8) bool {
+	return validateNonce(block, nonce, difficulty)
+}
+
+func validateNonce(block *Block, nonce string, difficulty uint8) bool {
+	block.Nonce = nonce
+	return strings.HasSuffix(block2hash(block), strings.Repeat("0", int(difficulty)))
 }
