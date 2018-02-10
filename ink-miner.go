@@ -374,31 +374,6 @@ func killFriends () {
 	}
 }
 
-func getBlockWithHash(hash string) *Block {
-	block, ok := blocks[hash]
-	if !ok {
-		// Get block from neighbours
-		// block = fromneighbour()
-	}
-	return &block
-}
-
-func getChildren (block *Block) []*Block {
-	hash := block2hash(block)
-	children := make([]*Block, 0, math.MaxUint16)
-	for _, b := range ink.tails {
-		for {
-			if b.PrevHash == hash {
-				children = append(children, b)
-				break
-			} else {
-				b = getBlockWithHash(b.PrevHash)
-			}
-		}
-	}
-	return children
-}
-
 func main() {
 	gob.Register(&net.TCPAddr{})
 	gob.Register(&elliptic.CurveParams{})
