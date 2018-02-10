@@ -283,8 +283,6 @@ func (s *RServer) GetNodes(key ecdsa.PublicKey, addrSet *[]net.Addr) error {
 	}
 	*addrSet = minerAddresses[:n]
 
-	fmt.Println(addrSet, minerAddresses, allMiners.all)
-
 	return nil
 }
 
