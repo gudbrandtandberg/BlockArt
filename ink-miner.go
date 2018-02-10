@@ -164,6 +164,7 @@ func (m2m *MinerToMiner) ConnectToNeighbour() (err error) {
 
 func (m2m *MinerToMiner) FloodToPeers(block *Block) (err error) {
 	fmt.Println("Sent", block.Nonce, block2hash(block))
+	m2m.HeartbeatNeighbours()
 
 	for _, neighbour := range ink.neighbours {
 		var reply bool
@@ -345,6 +346,9 @@ func (ink IMiner) Mine() (err error) {
 
 			default:
 				i++
+				if i % 50000 == 0 {
+					fmt.Println("mining:", block2hash(&currentBlock), currentBlock.PrevHash)
+				}
 				currentBlock.Nonce = strconv.FormatUint(i, 10)
 				if validateBlock(&currentBlock, difficulty) {
 					// successfully found nonce
