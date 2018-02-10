@@ -404,12 +404,32 @@ func block2string(block *Block) string {
 	return string(res1B)
 }
 
+/*
+Block validations:
+	Check that the nonce for the block is valid: PoW is correct and has the right difficulty.
+	Check that each operation in the block has a valid signature (this signature should be generated using the private key and the operation).
+	Check that the previous block hash points to a legal, previously generated, block.
+Operation validations:
+	Check that each operation has sufficient ink associated with the public key that generated the operation.
+	Check that each operation does not violate the shape intersection policy described above.
+	Check that the operation with an identical signature has not been previously added to the blockchain (prevents operation replay attacks).
+	Check that an operation that deletes a shape refers to a shape that exists and which has not been previously deleted.
+*/
+
 func validateBlock(block *Block, nonce string, difficulty uint8) bool {
-	return validateNonce(block, nonce, difficulty)
+	
+	var validNonce bool
+	validNonce = validateNonce(block, nonce, difficulty)
+	var validOpSigs bool
+	validOpSigs = true
+	for _, op := range block.Ops {
+		
+	}
+	
+	return true
 }
 
 func validateNonce(block *Block, nonce string, difficulty uint8) bool {
-	block.Nonce = nonce
 	return strings.HasSuffix(block2hash(block), strings.Repeat("0", int(difficulty)))
 }
 
