@@ -17,9 +17,10 @@ package main
 // this art-app.go file
 import (
 	"crypto/ecdsa"
-	"crypto/elliptic"
-	"crypto/rand"
+	"crypto/x509"
+	"encoding/hex"
 	"fmt"
+	"io/ioutil"
 	"os"
 
 	"./blockartlib"
@@ -44,19 +45,31 @@ var examples = map[string]string{
 	"pathintersects": "L 3 3 l 0 -3 z",
 }
 
+func decodeKey(hexStr string) (key *ecdsa.PrivateKey, err error) {
+	keyBytes, err := hex.DecodeString(hexStr)
+	if err != nil {
+		return key, err
+	}
+	return x509.ParseECPrivateKey(keyBytes)
+}
+
 func main() {
 
 	// testParser()
 	// return
 	minerAddr := "127.0.0.1:9878"
-	curve := elliptic.P384()
-	privKey, err := ecdsa.GenerateKey(curve, rand.Reader)
+	// curve := elliptic.P384()
+	// privKey, err := ecdsa.GenerateKey(curve, rand.Reader)
+
+	keyBytes, err := ioutil.ReadFile("keys/key.txt")
+	privKey, err := decodeKey(string(keyBytes))
 
 	//Open a canvas.
-	canvas, _, err := blockartlib.OpenCanvas(minerAddr, *privKey)
+	canvas, settings, err := blockartlib.OpenCanvas(minerAddr, *privKey)
 	if checkError(err) != nil {
 		return
 	}
+	fmt.Println(settings)
 
 	validateNum := uint8(2)
 

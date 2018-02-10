@@ -8,8 +8,12 @@ package blockartlib
 import (
 	"crypto/ecdsa"
 	"crypto/elliptic"
+	"crypto/md5"
+	"crypto/x509"
 	"encoding/gob"
+	"encoding/hex"
 	"fmt"
+	"io"
 	"net/rpc"
 )
 
@@ -171,17 +175,18 @@ func OpenCanvas(minerAddr string, privKey ecdsa.PrivateKey) (canvas Canvas, sett
 
 	client, err := rpc.Dial("tcp", minerAddr)
 	if err != nil {
+		err = DisconnectedError(minerAddr)
 		return
 	}
 	minerClient = client
 
-	err = minerClient.Call("RMiner.OpenCanvas", privKey, nil)
+	keyHash := hashPrivateKey(privKey)
+
+	err = minerClient.Call("RMiner.OpenCanvas", keyHash, &setting)
 	if err != nil {
 		return
 	}
 
-	x, y := uint32(1024), uint32(1024) // shoud come from call to miner
-	setting = CanvasSettings{x, y}
 	canvas = BACanvas{setting}
 
 	return canvas, setting, nil
@@ -205,7 +210,6 @@ type BACanvas struct {
 // - ShapeOverlapError
 // - OutOfBoundsError
 func (c BACanvas) AddShape(validateNum uint8, shapeType ShapeType, shapeSvgString string, fill string, stroke string) (shapeHash string, blockHash string, inkRemaining uint32, err error) {
-
 	parser := NewSVGParser()
 	shape, err := parser.Parse(shapeType, shapeSvgString, fill, stroke)
 
@@ -294,4 +298,30 @@ func (c BACanvas) CloseCanvas() (inkRemaining uint32, err error) {
 }
 
 // </CANVAS IMPLEMENTATION>
+////////////////////////////////////////////////////////////////////////////////////////////
+
+////////////////////////////////////////////////////////////////////////////////////////////
+// <EXTRA STUFF>
+
+func hashPrivateKey(key ecdsa.PrivateKey) [16]byte {
+	h := md5.New()
+	hexString, _ := encodeKey(key)
+	_, err := io.WriteString(h, hexString)
+	if err != nil {
+		fmt.Println(err)
+		return [16]byte{}
+	}
+	return md5.Sum(nil)
+}
+
+func encodeKey(key ecdsa.PrivateKey) (string, error) {
+	keyBytes, err := x509.MarshalECPrivateKey(&key)
+	if err != nil {
+		return "", err
+	}
+	keyString := hex.EncodeToString(keyBytes)
+	return keyString, nil
+}
+
+// </EXTRA STUFF>
 ////////////////////////////////////////////////////////////////////////////////////////////

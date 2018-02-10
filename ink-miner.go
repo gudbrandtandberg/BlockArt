@@ -14,11 +14,15 @@ import (
 	"crypto/elliptic"
 	"crypto/md5"
 	"crypto/rand"
+	"crypto/x509"
 	"encoding/gob"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"flag"
 	"fmt"
+	"io"
+	"io/ioutil"
 	"log"
 	"math"
 	"net"
@@ -333,6 +337,10 @@ func main() {
 		fmt.Println(err)
 	}
 
+	// For now: write key to file
+	keyString, _ := encodeKey(*priv)
+	ioutil.WriteFile("./keys/key.txt", []byte(keyString), 0666)
+
 	ipPort := flag.String("i", "127.0.0.1:12345", "RPC server ip:port")
 	client, err := rpc.Dial("tcp", *ipPort)
 
@@ -378,15 +386,22 @@ func main() {
 	// }
 }
 
+///////////////////////////////////////////////////////////////////////////////////////////////////////////////
+//								END OF ?, START OF ART2MINER IMLEMENTATION											 //
+///////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
 type RMiner int
 
-func (m *RMiner) OpenCanvas(key ecdsa.PrivateKey, reply *string) error {
+func (m *RMiner) OpenCanvas(keyHash [16]byte, reply *CanvasSettings) error {
 
 	fmt.Println("New ArtNode connecting")
 
-	if ink.key == key {
-		fmt.Println("Key is equal")
+	if hashPrivateKey(ink.key) != keyHash {
+		return errors.New("Miner: The key you are connecting with is not correct")
 	}
+
+	//*reply = ink.settings.CanvasSettings <-- should have queried the server first
+	*reply = CanvasSettings{1024, 1024} // <-- for now..
 
 	return nil
 }
@@ -415,8 +430,34 @@ func listenForArtNodes() {
 	}
 }
 
+func hashPrivateKey(key ecdsa.PrivateKey) [16]byte {
+	h := md5.New()
+	hexString, _ := encodeKey(key)
+	_, err := io.WriteString(h, hexString)
+	if err != nil {
+		fmt.Println(err)
+		return [16]byte{}
+	}
+	return md5.Sum(nil)
+}
+func decodeKey(hexStr string) (key *ecdsa.PrivateKey, err error) {
+	keyBytes, err := hex.DecodeString(hexStr)
+	if err != nil {
+		return key, err
+	}
+	return x509.ParseECPrivateKey(keyBytes)
+}
+func encodeKey(key ecdsa.PrivateKey) (string, error) {
+	keyBytes, err := x509.MarshalECPrivateKey(&key)
+	if err != nil {
+		return "", err
+	}
+	keyString := hex.EncodeToString(keyBytes)
+	return keyString, nil
+}
+
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////
-//								END OF METHODS, START OF MINING											 //
+//								END OF ART2MINER IMLEMENTATION, START OF MINING											 //
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 func block2hash(block *Block) string {
