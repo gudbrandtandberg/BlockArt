@@ -26,6 +26,7 @@ import (
 	"math"
 	"strconv"
 	"log"
+	"os/user"
 )
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -74,7 +75,7 @@ type IMinerInterface interface {
 
 	// Just a disconnected error? other errors will be handled by methods called within mine
 
-	Mine() error
+	Mine(<-chan Operation, <-chan Block) (chan<- Block, error)
 }
 
 type BlockInterface interface {}
@@ -104,33 +105,17 @@ type IMiner struct {
 	key ecdsa.PrivateKey
 }
 
-type Operation struct {
-	// todo: define this better
-	ValidateNum uint8
-	// ShapeType ShapeType
-	ShapeSvgString string
-	Fill string
-	Stroke string
-}
-
 type Block struct {
 	PrevHash string
 	Ops []Operation
 	InkTransaction int32
-	Key ecdsa.PublicKey
+	MinedBy ecdsa.PublicKey
 	Nonce uint32
 }
 
 type Operation struct {
 	svg string
 	owner ecdsa.PublicKey
-}
-
-type Block struct {
-	PrevHash string
-	MinedBy ecdsa.PublicKey
-	Ops []Operation
-	Nonce string
 }
 
 type BlockNode struct {
@@ -245,24 +230,65 @@ func (m2s *MinerToServer) HeartbeatServer() (err error) {
 	return
 }
 
-func (ink IMiner) Mine() (err error) {
-	var i uint64
-	ink.currentBlock.Ops = bufferedOps // TODO: will this break everything?
+func (ink IMiner) Mine(newOps <-chan Operation, newBlock <-chan Block) (foundBlock chan<- Block, err error) {
+	foundBlock = make(chan Block)
+	var i uint64 = 0
+	prevBlock := <-newBlock
+	prevHash := block2hash(&prevBlock)
+	opQueue := make([]Operation, 10, 10)
+	currentBlock := Block{PrevHash: prevHash, InkTransaction: 1, MinedBy: ink.key.PublicKey} // TODO: change inkTransaction
+	currentBlockOps := make([]Operation, 10, 10)
+	nonce := strconv.FormatUint(i, 10)
+	difficulty := ink.settings.PoWDifficultyNoOpBlock
 
-	for i = 0; i < math.MaxUint64; i++ {
-		nonce := strconv.FormatUint(i, 10)
-		difficulty := ink.settings.PoWDifficultyNoOpBlock
-		if len(ink.currentBlock.Ops) != 0 {
-			difficulty = ink.settings.PoWDifficultyOpBlock
+	go func() {
+		for {
+			select {
+				case b := <-newBlock:
+					prevBlock = b
+					prevHash = block2hash(&prevBlock)
+					currentBlockOps = append(currentBlockOps, opQueue...)
+					opQueue = make([]Operation, 10, 10)
+					difficulty = ink.settings.PoWDifficultyNoOpBlock
+					if len(currentBlockOps) != 0 {
+						difficulty = ink.settings.PoWDifficultyOpBlock
+					}
+					i = 0
+
+				case o := <-newOps:
+					opQueue = append(opQueue, o)
+
+				case validateNonce(&currentBlock, nonce, difficulty):
+					// successfully found nonce
+					log.Printf("found nonce: %s", nonce)
+					foundBlock <- currentBlock // spit out the found block via channel
+					prevBlock = currentBlock
+					prevHash = block2hash(&prevBlock)
+					i = 0
+
+				default:
+					i++
+					nonce = strconv.FormatUint(i, 10)
+			}
 		}
-		if validateNonce(ink.currentBlock, nonce, difficulty) {
-			// Broadcast nonce
-			log.Println(nonce)
-			ink.Mine() // Burn the CPU
-		}
-	}
-	log.Println("This should not happen")
-	return nil
+	}()
+
+	//ink.currentBlock.Ops = bufferedOps // TODO: will this break everything?
+	//
+	//for i = 0; i < math.MaxUint64; i++ {
+	//	nonce := strconv.FormatUint(i, 10)
+	//	difficulty := ink.settings.PoWDifficultyNoOpBlock
+	//	if len(ink.currentBlock.Ops) != 0 {
+	//		difficulty = ink.settings.PoWDifficultyOpBlock
+	//	}
+	//	if validateNonce(ink.currentBlock, nonce, difficulty) {
+	//		// Broadcast nonce
+	//		log.Println(nonce)
+	//		ink.Mine() // Burn the CPU
+	//	}
+	//}
+	// log.Println("This should not happen")
+	return foundBlock, nil
 }
 
 var ink IMiner
