@@ -28,7 +28,6 @@ The ArtNode&mdash;Miner connection is implemented using remote procedure calls (
 
 
 
-
 ### Graphics
 
 

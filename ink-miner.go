@@ -10,22 +10,22 @@ go run ink-miner.go [server ip:port] [pubKey] [privKey]
 package main
 
 import (
-	"fmt"
-	"net/rpc"
-	"flag"
-	"time"
 	"crypto/ecdsa"
 	"crypto/elliptic"
-	"encoding/gob"
-	"net"
-	"crypto/rand"
-	"encoding/json"
 	"crypto/md5"
+	"crypto/rand"
+	"encoding/gob"
 	"encoding/hex"
-	"strings"
-	"math"
-	"strconv"
+	"encoding/json"
+	"flag"
+	"fmt"
 	"log"
+	"math"
+	"net"
+	"net/rpc"
+	"strconv"
+	"strings"
+	"time"
 )
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -45,15 +45,15 @@ type MinerToMinerInterface interface {
 settings, err ← Register(address, publicKey)
 	Registers a new miner witMinerToMinerh an address for other miner to use to connect to it (returned in GetNodes call below)
 		and a public-key for this miner. Returns error, or if error is not set, then setting for this canvas instance.
-	Returns AddressAlreadyRegisteredError if the server has already registered this address. 
+	Returns AddressAlreadyRegisteredError if the server has already registered this address.
 	Returns KeyAlreadyRegisteredError if the server already has a registration record for publicKey.
 addrSet,err ← GetNodes(publicKey)
-	Returns addresses for a subset of miners in the system. Returns UnknownKeyError if the server does not know 
+	Returns addresses for a subset of miners in the system. Returns UnknownKeyError if the server does not know
 		a miner with this publicKey.
 err ← HeartBeat(publicKey)
-	The server also listens for heartbeats from known miners. A miner must send a heartbeat to the server 
-		every HeartBeat milliseconds (specified in settings from server) after calling Register, otherwise the server 
-		will stop returning this miner's address/key to other miners. 
+	The server also listens for heartbeats from known miners. A miner must send a heartbeat to the server
+		every HeartBeat milliseconds (specified in settings from server) after calling Register, otherwise the server
+		will stop returning this miner's address/key to other miners.
 	Returns UnknownKeyError if the server does not know a miner with this publicKey.
 */
 type MinerToServerInterface interface {
@@ -67,7 +67,7 @@ type MinerToServerInterface interface {
 	HeartbeatServer() error
 }
 
-type MinerFromANodeInterface interface {}
+type MinerFromANodeInterface interface{}
 
 type IMinerInterface interface {
 	// or []byte ??
@@ -77,7 +77,7 @@ type IMinerInterface interface {
 	Mine() error
 }
 
-type BlockInterface interface {}
+type BlockInterface interface{}
 
 // methods for validation, blockchain itself
 type BlockChainInterface interface {
@@ -85,44 +85,42 @@ type BlockChainInterface interface {
 	ValidateOps(BlockInterface) error
 }
 
-
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////
 //								END OF INTERFACES, START OF STRUCTS											 //
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-type MinerToMiner struct {}
-type MinerToServer struct {}
+type MinerToMiner struct{}
+type MinerToServer struct{}
 type IMiner struct {
 	serverClient *rpc.Client
-	localAddr net.Addr
-	neighbours map[net.Addr]*rpc.Client
+	localAddr    net.Addr
+	neighbours   map[net.Addr]*rpc.Client
 
 	settings MinerNetSettings
 
-	tails []*Block
+	tails        []*Block
 	currentBlock *Block
 
 	key ecdsa.PrivateKey
 }
 
 type Operation struct {
-	svg string
+	svg   string
 	owner ecdsa.PublicKey
 }
 
 type Block struct {
 	PrevHash string
-	MinedBy ecdsa.PublicKey
-	Ops []Operation
-	Nonce string
+	MinedBy  ecdsa.PublicKey
+	Ops      []Operation
+	Nonce    string
 }
 
 type BlockNode struct {
-	Block Block
+	Block    Block
 	Children []BlockNode
-	Parent BlockNode
+	Parent   BlockNode
 }
-
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////
 //								END OF STRUCTS, START OF METHODS											 //
@@ -188,23 +186,23 @@ type CanvasSettings struct {
 	CanvasYMax uint32 `json:"canvas-y-max"`
 }
 
-// makes RPC Register(localAddr, pubKey) call, and registers settings returned for canvas or returns error
+// Register makes RPC Register(localAddr, pubKey) call, and registers settings returned for canvas or returns error
 func (m2s *MinerToServer) Register() (err error) {
 	fmt.Println(ink.localAddr)
 	m := &MinerInfo{
 		Address: ink.localAddr,
-		Key: ink.key.PublicKey,
+		Key:     ink.key.PublicKey,
 	}
 	var settings MinerNetSettings
 	err = ink.serverClient.Call("RServer.Register", m, &settings)
 	if err != nil {
 		return nil
 	}
-	ink.settings = settings;
+	ink.settings = settings
 	return
 }
 
-// Makes RPC GetNodes(pubKey) call, makes a call to ConnectToNeighbour for each returned addr, can return errors
+// GetNodes makes RPC GetNodes(pubKey) call, makes a call to ConnectToNeighbour for each returned addr, can return errors
 func (m2s *MinerToServer) GetNodes() (err error) {
 	minerAddresses := make([]net.Addr, 0, math.MaxUint16)
 	err = ink.serverClient.Call("RServer.GetNodes", ink.key.PublicKey, &minerAddresses)
@@ -218,17 +216,18 @@ func (m2s *MinerToServer) GetNodes() (err error) {
 	return
 }
 
-// makes RPC HearBeat(pubKey) call, changes connected state accordingly which will return different errors for art node requests
+// HeartbeatServer makes RPC HearBeat(pubKey) call, changes connected state accordingly which will return different errors for art node requests
 func (m2s *MinerToServer) HeartbeatServer() (err error) {
 	// Create a struct, that mimics all methods provided by interface.
 	// It is not compulsory, we are doing it here, just to simulate a traditional method call.
 	var ignored bool
 	//client.Call("RServer.HeartBeat", nil, &ignored)
 	err = ink.serverClient.Call("RServer.HeartBeat", ink.key.PublicKey, &ignored)
-//	fmt.Println("Sent HB:", ignored, err)
+	//	fmt.Println("Sent HB:", ignored, err)
 	return
 }
 
+// Mine <-- comment.
 func (ink IMiner) Mine() (err error) {
 	var i uint64
 	ink.currentBlock.Ops = bufferedOps // TODO: will this break everything?
@@ -270,7 +269,7 @@ func tmp() net.Addr {
 	return l.Addr()
 }
 
-func killFriends () {
+func killFriends() {
 	for addr, miner := range ink.neighbours {
 		err := miner.Call("MinerToMiner.ListenHB", "", nil)
 		if err != nil {
@@ -288,7 +287,7 @@ func getBlockWithHash(hash string) *Block {
 	return &block
 }
 
-func getChildren (block *Block) []*Block {
+func getChildren(block *Block) []*Block {
 	hash := block2hash(block)
 	children := make([]*Block, 0, math.MaxUint16)
 	for _, b := range ink.tails {
@@ -321,9 +320,9 @@ func main() {
 	bufferedOps = make([]Operation, 0, math.MaxUint16)
 	ink = IMiner{
 		serverClient: client,
-		key: *priv,
-		localAddr: l,
-		neighbours: make(map[net.Addr]*rpc.Client),
+		key:          *priv,
+		localAddr:    l,
+		neighbours:   make(map[net.Addr]*rpc.Client),
 	}
 
 	// Register with server
@@ -332,12 +331,13 @@ func main() {
 
 	genesisBlock := &Block{
 		PrevHash: ink.settings.GenesisBlockHash,
-		MinedBy: priv.PublicKey,
+		MinedBy:  priv.PublicKey,
 	}
 	ink.currentBlock = genesisBlock
 
 	fmt.Println(err, ink.neighbours)
 
+	go listenForClients()
 	go ink.Mine()
 
 	// Heartbeat server
@@ -349,11 +349,32 @@ func main() {
 	}
 }
 
+type RMiner int
+
+func (m *RMiner) OpenCanvas(args interface{}, reply *interface{}) error {
+	fmt.println("New ArtNode connecting")
+
+	return nil
+}
+
+func listenForClients() {
+	artServer := rpc.NewServer()
+	rminer := new(RMiner)
+	artServer.Register(rminer)
+	l, err := net.Listen("tcp", ink.localAddr)
+
+	outLog.Printf("Artserver started. Receiving on %s\n", ink.localAddr)
+	for {
+		conn, _ := l.Accept()
+		go artServer.ServeConn(conn)
+	}
+}
+
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////
 //								END OF METHODS, START OF MINING											 //
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-func block2hash (block *Block) string {
+func block2hash(block *Block) string {
 	hasher := md5.New()
 	hasher.Write([]byte(block2string(block)))
 	return hex.EncodeToString(hasher.Sum(nil))

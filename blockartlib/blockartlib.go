@@ -5,8 +5,12 @@ library (blockartlib) to be used in project 1 of UBC CS 416 2017W2.
 
 package blockartlib
 
-import "crypto/ecdsa"
-import "fmt"
+import (
+	"crypto/ecdsa"
+	"fmt"
+	"net"
+	"net/rpc"
+)
 
 // ShapeType represents a type of shape in the BlockArt system.
 type ShapeType int
@@ -134,11 +138,20 @@ type ArtNodeToMinerInterface interface {
 	OpenCanvas()
 }
 
-type Art2Miner struct{}
+type Art2Miner struct {
+}
 
-func (a *Art2Miner) OpenCanvas() {
+type ArtNode struct {
+	minerClient *rpc.Client
+	localAddr   net.Addr
+}
+
+func (a2m *Art2Miner) OpenCanvas() {
 
 }
+
+var art2miner Art2Miner
+var minerClient *rpc.Client
 
 // </ART NOTE 2 MINER IMPLEMENTATION>
 ////////////////////////////////////////////////////////////////////////////////////////////
@@ -169,10 +182,18 @@ type Canvas interface {
 // Can return the following errors:
 // - DisconnectedError
 func OpenCanvas(minerAddr string, privKey ecdsa.PrivateKey) (canvas Canvas, setting CanvasSettings, err error) {
-	// TODO
+
+	minerClient, err := rpc.Dial("tcp", minerAddr)
+	if err != nil {
+		return
+	}
+
+	err = minerClient.Call("RMiner.OpenCanvas", "", nil)
+	if err != nil {
+		return
+	}
 
 	x, y := uint32(1024), uint32(1024) // shoud come from call to miner
-
 	setting = CanvasSettings{x, y}
 	canvas = BACanvas{setting}
 
