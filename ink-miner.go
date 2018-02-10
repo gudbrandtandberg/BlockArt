@@ -36,6 +36,7 @@ type MinerToMinerInterface interface {
 	ConnectToNeighbour() error
 	FloodToPeers() error
 	HeartbeatNeighbours() error
+	GetHeartbeats() error
 	RegisterNeighbour() error
 	ReceiveAndFlood() error
 }
@@ -136,13 +137,45 @@ func (m2m *MinerToMiner) FloodToPeers() (err error) {
 	return
 }
 
-func (m2m2 *MinerToMiner) ListenHB(inc string, out *string) (err error) {
+func (m2m2 *MinerToMiner) GetHeartbeats(inc string, out *string) (err error) {
+	*out = "hello i'm online"
 	return
 }
 
 func (m2m *MinerToMiner) HeartbeatNeighbours() (err error) {
-	return
+
+	for {
+		for neighbourAddr, neighbourRPC := range ink.neighbours {
+			var rep string
+			timeout := make(chan error, 1)
+			go func() {
+				timeout <- neighbourRPC.Call("MinerToMiner.GetHeartbeats", "", &rep)
+			}()
+			select {
+				case err := <-timeout:
+					if err != nil {
+						delete(ink.neighbours, neighbourAddr)
+					}
+				case <-time.After(1 * time.Second):
+					delete(ink.neighbours, neighbourAddr)
+				}
+			}
+		//give neighbours time to respond		
+		time.Sleep(1 * time.Second)
+		//if we have good neighbours, return
+		if len(ink.neighbours) >= int(ink.settings.MinNumMinerConnections) {
+			return
+		}
+		//else we get more neighbours
+		err = miner2server.GetNodes()
+		checkError(err)
+		err = m2m.HeartbeatNeighbours()
+		checkError(err)
+
+	}
 }
+
+
 func (m2m *MinerToMiner) RegisterNeighbour() (err error) {
 	return
 }
@@ -375,4 +408,19 @@ func validateBlock(block *Block, nonce string, difficulty uint8) bool {
 func validateNonce(block *Block, nonce string, difficulty uint8) bool {
 	block.Nonce = nonce
 	return strings.HasSuffix(block2hash(block), strings.Repeat("0", int(difficulty)))
+}
+
+
+
+
+
+///////////////////////////////////////////////////////////////////////////////////////////////////////////////
+//								END OF MINING, START OF UTILITIES											 //
+///////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+
+func checkError(err error) {
+	if err != nil {
+		fmt.Println("ERROR:", err)
+	}
 }
