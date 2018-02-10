@@ -219,12 +219,13 @@ func (m2s *MinerToServer) HeartbeatServer() (err error) {
 	var ignored bool
 	//client.Call("RServer.HeartBeat", nil, &ignored)
 	err = ink.serverClient.Call("RServer.HeartBeat", ink.key.PublicKey, &ignored)
-	fmt.Println("Sent HB:", ignored, err)
+//	fmt.Println("Sent HB:", ignored, err)
 	return
 }
 
 func (ink IMiner) Mine() (err error) {
 	var i uint64
+	ink.currentBlock.Ops = bufferedOps // TODO: will this break everything?
 
 	for i = 0; i < math.MaxUint64; i++ {
 		nonce := strconv.FormatUint(i, 10)
@@ -235,9 +236,10 @@ func (ink IMiner) Mine() (err error) {
 		if validateNonce(ink.currentBlock, nonce, difficulty) {
 			// Broadcast nonce
 			log.Println(nonce)
-			return nil
+			ink.Mine() // Burn the CPU
 		}
 	}
+	log.Println("This should not happen")
 	return nil
 }
 
@@ -245,6 +247,7 @@ var ink IMiner
 var miner2server MinerToServer
 var miner2miner MinerToMiner
 var blocks map[string]Block
+var bufferedOps []Operation
 
 func tmp() net.Addr {
 	server := rpc.NewServer()
@@ -309,7 +312,7 @@ func main() {
 	client, err := rpc.Dial("tcp", *ipPort)
 
 	l := tmp()
-
+	bufferedOps = make([]Operation, 0, math.MaxUint16)
 	ink = IMiner{
 		serverClient: client,
 		key: *priv,
@@ -324,7 +327,6 @@ func main() {
 	genesisBlock := &Block{
 		PrevHash: ink.settings.GenesisBlockHash,
 		MinedBy: priv.PublicKey,
-		Ops: make([]Operation, 0, 0),
 	}
 	ink.currentBlock = genesisBlock
 
