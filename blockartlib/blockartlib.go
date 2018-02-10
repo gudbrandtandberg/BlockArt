@@ -7,6 +7,8 @@ package blockartlib
 
 import (
 	"crypto/ecdsa"
+	"crypto/elliptic"
+	"encoding/gob"
 	"fmt"
 	"net/rpc"
 )
@@ -164,6 +166,8 @@ type Canvas interface {
 // Can return the following errors:
 // - DisconnectedError
 func OpenCanvas(minerAddr string, privKey ecdsa.PrivateKey) (canvas Canvas, setting CanvasSettings, err error) {
+	gob.Register(ecdsa.PrivateKey{})
+	gob.Register(&elliptic.CurveParams{})
 
 	client, err := rpc.Dial("tcp", minerAddr)
 	if err != nil {
@@ -171,7 +175,7 @@ func OpenCanvas(minerAddr string, privKey ecdsa.PrivateKey) (canvas Canvas, sett
 	}
 	minerClient = client
 
-	err = minerClient.Call("RMiner.OpenCanvas", "", nil)
+	err = minerClient.Call("RMiner.OpenCanvas", privKey, nil)
 	if err != nil {
 		return
 	}

@@ -380,8 +380,13 @@ func main() {
 
 type RMiner int
 
-func (m *RMiner) OpenCanvas(args string, reply *string) error {
+func (m *RMiner) OpenCanvas(key ecdsa.PrivateKey, reply *string) error {
+
 	fmt.Println("New ArtNode connecting")
+
+	if ink.key == key {
+		fmt.Println("Key is equal")
+	}
 
 	return nil
 }
@@ -392,6 +397,8 @@ func (m *RMiner) AddShape(args string, reply *string) error {
 }
 
 func listenForArtNodes() {
+	gob.Register(ecdsa.PrivateKey{})
+	gob.Register(&elliptic.CurveParams{})
 
 	artServer := rpc.NewServer()
 	rminer := new(RMiner)
