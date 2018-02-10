@@ -444,8 +444,9 @@ func main() {
 	checkError(err)
 
 	genesisBlock := Block{
-		PrevHash: ink.settings.GenesisBlockHash,
-		MinedBy:  priv.PublicKey,
+		PrevHash: "foobar",
+		Nonce: "1337",
+		MinedBy: ecdsa.PublicKey{},
 	}
 
 	go func() {
@@ -455,7 +456,6 @@ func main() {
 		}
 	}()
 	ink.currentBlock = &genesisBlock
-
 	fmt.Println(err, ink.neighbours)
 
 	// Heartbeat server
