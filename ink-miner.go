@@ -191,8 +191,10 @@ func (m2m *MinerToMiner) ReceiveBlock(block *Block, reply *bool) (err error) {
 		difficulty = ink.settings.PoWDifficultyOpBlock
 	}
 	if validateBlock(block, difficulty) {
+		fmt.Println("trying to validate")
 		for _, head := range ink.getBlockChainHeads() {
 			if block2hash(&head.Block) == block.PrevHash {
+				fmt.Println("validated")
 				newBlockCH <- *block
 			} else {
 				log.Println("tsk tsk Received block does not append to a head")
@@ -327,10 +329,12 @@ func (ink IMiner) Mine() (err error) {
 }
 
 func (ink IMiner) getBlockChainHeads() (heads []BlockNode) {
-	heads = make([]BlockNode, 0, math.MaxUint16)
-	nodesToCheck := make([]BlockNode, 0, math.MaxUint32)
+	heads = make([]BlockNode, 0)
+	nodesToCheck := make([]BlockNode, 0)
+	nodesToCheck = append(nodesToCheck, genesisNode)
 	for len(nodesToCheck) > 0 {
 		var node BlockNode = nodesToCheck[0]
+		nodesToCheck = nodesToCheck[1:]
 		if len(node.Children) == 0 {
 			heads = append(heads, node)
 		} else {
