@@ -67,7 +67,11 @@ type MinerToServerInterface interface {
 	HeartbeatServer() error
 }
 
-type MinerFromANodeInterface interface {}
+type MinerFromANodeInterface interface {
+	GetGenesisBlock(input string, hash *string) (err error)
+	GetChildren(hash string, childrenHashes *[]string) (err error)
+
+}
 
 type IMinerInterface interface {
 	// or []byte ??
@@ -92,6 +96,7 @@ type BlockChainInterface interface {
 
 type MinerToMiner struct {}
 type MinerToServer struct {}
+type MinerFromANode struct {}
 type IMiner struct {
 	serverClient *rpc.Client
 	localAddr net.Addr
@@ -116,16 +121,42 @@ type Operation struct {
 	owner ecdsa.PublicKey
 }
 
-/*type BlockNode struct {
+type BlockNode struct {
 	Block Block
 	Children []BlockNode
-	Parent BlockNode
-}*/
+}
 
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////
 //								END OF STRUCTS, START OF METHODS											 //
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+func (art MinerFromANode) GetGenesisBlock(input string, hash *string) (err error) {
+	*hash = ink.settings.GenesisBlockHash
+	return
+}
+
+type InvalidBlockHashError string
+func (e InvalidBlockHashError) Error() string {
+	return fmt.Sprintf("BlockArt: Invalid block hash [%s]", string(e))
+}
+
+func (art MinerFromANode) GetChildren(hash string, childrenHashes *[]string) (err error) {
+	nodesToCheck := make([]BlockNode, 0, math.MaxUint32)
+	nodesToCheck = append(nodesToCheck, genesisNode)
+	for len(nodesToCheck) > 0 {
+		var node BlockNode = nodesToCheck[0]
+		if block2hash(&node.Block) == hash {
+			*childrenHashes = make([]string, 0, len(node.Children))
+			for _, child := range node.Children {
+				*childrenHashes = append(*childrenHashes, block2hash(&child.Block))
+			}
+			return
+		}
+		nodesToCheck = append(nodesToCheck, node.Children...)
+	}
+	return InvalidBlockHashError(hash)
+}
 
 func (m2m *MinerToMiner) ConnectToNeighbour() (err error) {
 	return
@@ -145,7 +176,21 @@ func (m2m *MinerToMiner) HeartbeatNeighbours() (err error) {
 func (m2m *MinerToMiner) RegisterNeighbour() (err error) {
 	return
 }
-func (m2m *MinerToMiner) ReceiveBlock(Block) (err error) {
+func (m2m *MinerToMiner) ReceiveBlock(block *Block, reply *bool) (err error) {
+	difficulty := ink.settings.PoWDifficultyNoOpBlock
+	if len(block.Ops) != 0 {
+		difficulty = ink.settings.PoWDifficultyOpBlock
+	}
+	if validateBlock(block, difficulty) {
+		blockNode.GetHeads()
+		for head in heads {
+			if head == block.prevHash {
+
+			}
+		}
+		newBlockCH <- block
+	}
+
 	return
 }
 
@@ -228,8 +273,7 @@ func (m2s *MinerToServer) HeartbeatServer() (err error) {
 	return
 }
 
-func (ink IMiner) Mine(newOps chan Operation, newBlock chan Block) (foundBlock chan Block, err error) {
-	foundBlock = make(chan Block)
+func (ink IMiner) Mine() (err error) {
 	var i uint64 = 0
 	opQueue := make([]Operation, 0)
 	difficulty := ink.settings.PoWDifficultyNoOpBlock
@@ -239,7 +283,7 @@ func (ink IMiner) Mine(newOps chan Operation, newBlock chan Block) (foundBlock c
 	go func() {
 		for {
 			select {
-			case b := <-newBlock:
+			case b := <-newBlockCH:
 				currentBlock = Block{
 					PrevHash: block2hash(&b),
 					MinedBy:  ink.key.PublicKey,
@@ -252,7 +296,7 @@ func (ink IMiner) Mine(newOps chan Operation, newBlock chan Block) (foundBlock c
 				}
 				i = 0
 
-			case o := <-newOps:
+			case o := <-newOpsCH:
 				opQueue = append(opQueue, o)
 
 			default:
@@ -261,14 +305,18 @@ func (ink IMiner) Mine(newOps chan Operation, newBlock chan Block) (foundBlock c
 				if validateBlock(&currentBlock, difficulty) {
 					// successfully found nonce
 					log.Printf("found nonce: %s", currentBlock.Nonce)
-					foundBlock <- currentBlock                                                            // spit out the found block via channel
-					currentBlock = Block{PrevHash: block2hash(&currentBlock), MinedBy: ink.key.PublicKey} // TODO: change inkTransaction
+					foundBlockCH <- currentBlock // spit out the found block via channel
+					currentBlock = Block{PrevHash: block2hash(&currentBlock), MinedBy: ink.key.PublicKey}
 					i = 0
 				}
 			}
 		}
 	}()
-	return foundBlock, nil
+	return nil
+}
+
+func (ink IMiner) getBlockChainHeads() (heads []BlockNode) {
+	
 }
 
 var ink IMiner
@@ -276,6 +324,12 @@ var miner2server MinerToServer
 var miner2miner MinerToMiner
 var blocks map[string]Block
 var bufferedOps []Operation
+
+var newOpsCH (chan Operation)
+var newBlockCH (chan Block)
+var foundBlockCH (chan Block)
+
+var genesisNode BlockNode
 
 func tmp() net.Addr {
 	server := rpc.NewServer()
@@ -331,6 +385,10 @@ func main() {
 	gob.Register(&elliptic.CurveParams{})
 	gob.Register(&MinerInfo{})
 
+	newOpsCH = make(chan Operation)
+	newBlockCH = make(chan Block)
+	foundBlockCH = make(chan Block)
+
 	priv, err := ecdsa.GenerateKey(elliptic.P384(), rand.Reader)
 	if err != nil {
 		fmt.Println(err)
@@ -356,16 +414,21 @@ func main() {
 		PrevHash: ink.settings.GenesisBlockHash,
 		MinedBy: priv.PublicKey,
 	}
+	genesisNode := BlockNode{
+		Block: genesisBlock,
+	}
 
 	fmt.Println(err, ink.neighbours)
 
-	newOpsCH := make(chan Operation)
-	newBlockCH := make(chan Block)
-	foundBlockCH, err := ink.Mine(newOpsCH, newBlockCH)
+	err = ink.Mine()
 
 	newBlockCH <- genesisBlock
 
 	h := <-foundBlockCH
+	newNode := BlockNode{
+		Block: h,
+	}
+	genesisNode.Children = append(genesisNode.Children, newNode)
 	fmt.Println(h, h.PrevHash, genesisBlock)
 
 	// Heartbeat server
