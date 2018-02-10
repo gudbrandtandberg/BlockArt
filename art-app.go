@@ -38,6 +38,7 @@ var examples = map[string]string{
 	"129":            "M 1 1 l 149 100 h 10 v -10 h 10 v -10 h -10 v 10 h -10 v -10 h 10 v -10 h 100 v 100 h -100 v -50 h -10 v 50 h -10 v -50 l -10 0 z",
 	"128":            "M 1 1 l 149 99 h 10 v -10 h 10 v -10 h -10 v 10 h -10 v -10 h 10 v -10 h 100 v 100 h -100 v -50 h -10 v 50 h -10 v -50 l -10 0 z",
 	"unitcircle":     "0, 0, 1",
+	"half":           "0, 0, 0.5",
 	"pathinside":     "M 0 0 l 0.3 0.2 l -0.3 0 z",
 	"pathoutside":    "M 2 2 h 10",
 	"pathintersects": "L 3 3 l 0 -3 z",
@@ -46,9 +47,9 @@ var examples = map[string]string{
 func main() {
 
 	testParser()
-
+	return
 	minerAddr := "127.0.0.1:8080"
-	curve := elliptic.P224()
+	curve := elliptic.P384()
 	privKey, err := ecdsa.GenerateKey(curve, rand.Reader)
 
 	//Open a canvas.
@@ -122,13 +123,13 @@ func checkError(err error) error {
 func testParser() {
 	parser := blockartlib.NewSVGParser()
 
-	shape1, _ := parser.Parse(blockartlib.CIRCLE, examples["unitcircle"], "blue", "black")
-	shape2, _ := parser.Parse(blockartlib.PATH, examples["pathinside"], "transparent", "black")
+	shape1, _ := parser.Parse(blockartlib.CIRCLE, examples["unitcircle"], "transparent", "black")
+	shape2, _ := parser.Parse(blockartlib.CIRCLE, examples["half"], "transparent", "black")
 
 	fmt.Println(shape1)
 	fmt.Println(shape2)
 
-	intersects := blockartlib.Intersects(shape1, shape2)
+	intersects := blockartlib.Intersects(shape2, shape1)
 
 	fmt.Println("Shapes intersect:", intersects)
 
