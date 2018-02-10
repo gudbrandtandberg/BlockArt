@@ -34,10 +34,10 @@ import (
 
 type MinerToMinerInterface interface {
 	ConnectToNeighbour() error
-	FloodToPeers(Block) error
+	FloodToPeers(block *Block) error
 	HeartbeatNeighbours() error
 	RegisterNeighbour() error
-	ReceiveBlock(Block) error
+	ReceiveBlock(block *Block, reply *bool) (err error)
 }
 
 ////// TCP RPC calls to make against server
@@ -117,8 +117,8 @@ type Block struct {
 }
 
 type Operation struct {
-	svg string
-	owner ecdsa.PublicKey
+	Svg string
+	Owner ecdsa.PublicKey
 }
 
 type BlockNode struct {
@@ -261,11 +261,13 @@ func (m2s *MinerToServer) Register() (err error) {
 func (m2s *MinerToServer) GetNodes() (err error) {
 	minerAddresses := make([]net.Addr, 0, math.MaxUint16)
 	err = ink.serverClient.Call("RServer.GetNodes", ink.key.PublicKey, &minerAddresses)
-
+	fmt.Println(minerAddresses)
 	for _, addr := range minerAddresses {
 		client, err := rpc.Dial("tcp", addr.String())
 		if err == nil {
 			ink.neighbours[addr] = client
+		} else {
+			fmt.Println(err)
 		}
 	}
 	return
@@ -352,6 +354,7 @@ var genesisNode BlockNode
 
 func tmp() net.Addr {
 	server := rpc.NewServer()
+	server.Register(&MinerToMiner{})
 
 	l, _ := net.Listen("tcp", ":0")
 
@@ -423,7 +426,6 @@ func main() {
 		Block: h,
 	}
 	genesisNode.Children = append(genesisNode.Children, newNode)
-	fmt.Println(h, h.PrevHash, genesisBlock)
 
 	go func() {
 		for {

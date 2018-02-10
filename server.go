@@ -27,7 +27,6 @@ import (
 	"fmt"
 	"io/ioutil"
 	"log"
-	"math"
 	"math/rand"
 	"net"
 	"net/rpc"
@@ -81,7 +80,23 @@ type MinerSettings struct {
 
 // Settings for an instance of the BlockArt project/network.
 type MinerNetSettings struct {
-	MinerSettings
+	// Hash of the very first (empty) block in the chain.
+	GenesisBlockHash string `json:"genesis-block-hash"`
+
+	// The minimum number of ink miners that an ink miner should be
+	// connected to.
+	MinNumMinerConnections uint8 `json:"min-num-miner-connections"`
+
+	// Mining ink reward per op and no-op blocks (>= 1)
+	InkPerOpBlock   uint32 `json:"ink-per-op-block"`
+	InkPerNoOpBlock uint32 `json:"ink-per-no-op-block"`
+
+	// Number of milliseconds between heartbeat messages to the server.
+	HeartBeat uint32 `json:"heartbeat"`
+
+	// Proof of work difficulty: number of zeroes in prefix (>=0)
+	PoWDifficultyOpBlock   uint8 `json:"pow-difficulty-op-block"`
+	PoWDifficultyNoOpBlock uint8 `json:"pow-difficulty-no-op-block"`
 
 	// Canvas settings
 	CanvasSettings CanvasSettings `json:"canvas-settings"`
@@ -125,18 +140,12 @@ func readConfigOrDie(path string) {
 	handleErrorFatal("parse config", err)
 }
 
-// These variables control whether we should be working with the webserver
-const (
-	BROADCAST = false
-	GENERATE  = false
-)
-
 // Parses args, setups up RPC server.
 func main() {
 	gob.Register(&net.TCPAddr{})
 	gob.Register(&elliptic.CurveParams{})
 
-	path := flag.String("c", "config.json", "Path to the JSON config")
+	path := flag.String("c", "", "Path to the JSON config")
 	flag.Parse()
 
 	if *path == "" {
@@ -145,11 +154,6 @@ func main() {
 	}
 
 	readConfigOrDie(*path)
-
-	// Start listening for / broadcasting new blocks
-	newBlockCh := make(chan Path) // should contain blocks in the future
-	go generateNewBlocks(newBlockCh)
-	go broadcastNewBlocks(newBlockCh)
 
 	rand.Seed(time.Now().UnixNano())
 
@@ -178,17 +182,13 @@ type MinerInfo struct {
 func monitor(k string, heartBeatInterval time.Duration) {
 	for {
 		allMiners.Lock()
-		if time.Now().UnixNano()-allMiners.all[k].RecentHeartbeat > int64(heartBeatInterval) {
-			fmt.Println("timed out",
-				int64(time.Now().UnixNano()),
-				int64(allMiners.all[k].RecentHeartbeat),
-				int64(heartBeatInterval),
-				allMiners.all[k].Address.String())
+		if time.Now().UnixNano()-allMiners.all[k].RecentHeartbeat > int64(heartBeatInterval*100) {
+			outLog.Printf("%s timed out\n", allMiners.all[k].Address.String())
 			delete(allMiners.all, k)
 			allMiners.Unlock()
 			return
 		}
-		outLog.Printf("%s is alive\n", allMiners.all[k].Address.String())
+//		outLog.Printf("%s is alive\n", allMiners.all[k].Address.String())
 		allMiners.Unlock()
 		time.Sleep(heartBeatInterval)
 	}
@@ -277,8 +277,13 @@ func (s *RServer) GetNodes(key ecdsa.PublicKey, addrSet *[]net.Addr) error {
 		minerAddresses[n-1], minerAddresses[randIndex] = minerAddresses[randIndex], minerAddresses[n-1]
 	}
 
-	numMiners := math.Min(float64(len(allMiners.all)-1), float64(config.NumMinerToReturn))
-	*addrSet = minerAddresses[:int64(numMiners)]
+	n := len(minerAddresses)
+	if int(config.NumMinerToReturn) < n {
+		n = int(config.NumMinerToReturn)
+	}
+	*addrSet = minerAddresses[:n]
+
+	fmt.Println(addrSet, minerAddresses, allMiners.all)
 
 	return nil
 }
@@ -292,8 +297,6 @@ func (s *RServer) GetNodes(key ecdsa.PublicKey, addrSet *[]net.Addr) error {
 // Returns:
 // - UnknownKeyError if the server does not know a miner with this publicKey.
 func (s *RServer) HeartBeat(key ecdsa.PublicKey, _ignored *bool) error {
-	fmt.Println("Received HB:")
-
 	allMiners.Lock()
 	defer allMiners.Unlock()
 
@@ -310,68 +313,5 @@ func (s *RServer) HeartBeat(key ecdsa.PublicKey, _ignored *bool) error {
 func handleErrorFatal(msg string, e error) {
 	if e != nil {
 		errLog.Fatalf("%s, err = %s\n", msg, e.Error())
-	}
-}
-
-//// Gudbrand's code
-
-const (
-	webServerAddr = "127.0.0.1:7255"
-	delayMean     = 4.0
-	delayStd      = 3.0
-)
-
-// A Path contains fields for drawing SVG path elements
-type Path struct {
-	SVGString string
-	Fill      string
-	Stroke    string
-}
-
-// Every time a new block is made, this process will broadcast the block to the web-server
-func broadcastNewBlocks(ch chan Path) {
-	if !BROADCAST {
-		return
-	}
-	// TODO: handle errors
-	for {
-		p := <-ch
-		fmt.Println("About to tell the webserver about the new block")
-		conn, err := net.Dial("tcp", webServerAddr)
-		if err != nil {
-			fmt.Println(err)
-		}
-		msg, err := json.Marshal(p)
-		if err != nil {
-			fmt.Println(err)
-		}
-		_, err = conn.Write(msg)
-		if err != nil {
-			fmt.Println(err)
-		}
-		conn.Close()
-	}
-}
-
-var blackSquare = Path{"M 10 10 h 100 v 100 h -100 v -100", "black", "black"}
-var yellowSquare = Path{"M 110 110 h 100 v 100 h -100 v -100", "yellow", "black"}
-var redSquare = Path{"M 210 10 h 100 v 100 h -100 v -100", "red", "black"}
-var blueSquare = Path{"M 10 210 h 100 v 100 h -100 v -100", "blue", "black"}
-var greenSquare = Path{"M 210 210 h 100 v 100 h -100 v -100", "green", "black"}
-var commandQueue = []Path{blackSquare, yellowSquare, redSquare, blueSquare, greenSquare}
-
-func generateNewBlocks(ch chan Path) {
-	if !GENERATE {
-		return
-	}
-	i := 0
-	for {
-		delay := time.Duration(math.Max(rand.NormFloat64()*delayStd+delayMean, 0.0))
-		time.Sleep(delay * time.Second)
-		if i < 5 {
-			fmt.Printf("Issuing command #%d\n", i)
-			ch <- commandQueue[i]
-		}
-		i++
 	}
 }
