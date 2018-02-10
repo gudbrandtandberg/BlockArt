@@ -34,11 +34,11 @@ import (
 
 type MinerToMinerInterface interface {
 	ConnectToNeighbour() error
-	FloodToPeers() error
+	FloodToPeers(Block) error
 	HeartbeatNeighbours() error
 	GetHeartbeats() error
 	RegisterNeighbour() error
-	ReceiveAndFlood() error
+	ReceiveBlock(Block) error
 }
 
 ////// TCP RPC calls to make against server
@@ -75,7 +75,7 @@ type IMinerInterface interface {
 
 	// Just a disconnected error? other errors will be handled by methods called within mine
 
-	Mine() error
+	Mine(chan Operation, chan Block) (chan Block, error)
 }
 
 type BlockInterface interface {}
@@ -102,8 +102,14 @@ type IMiner struct {
 
 	tails []*Block
 	currentBlock *Block
-
 	key ecdsa.PrivateKey
+}
+
+type Block struct {
+	PrevHash string
+	Ops []Operation
+	MinedBy ecdsa.PublicKey
+	Nonce string
 }
 
 type Operation struct {
@@ -111,18 +117,11 @@ type Operation struct {
 	owner ecdsa.PublicKey
 }
 
-type Block struct {
-	PrevHash string
-	MinedBy ecdsa.PublicKey
-	Ops []Operation
-	Nonce string
-}
-
-type BlockNode struct {
+/*type BlockNode struct {
 	Block Block
 	Children []BlockNode
 	Parent BlockNode
-}
+}*/
 
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -133,7 +132,7 @@ func (m2m *MinerToMiner) ConnectToNeighbour() (err error) {
 	return
 }
 
-func (m2m *MinerToMiner) FloodToPeers() (err error) {
+func (m2m *MinerToMiner) FloodToPeers(Block) (err error) {
 	return
 }
 
@@ -179,7 +178,7 @@ func (m2m *MinerToMiner) HeartbeatNeighbours() (err error) {
 func (m2m *MinerToMiner) RegisterNeighbour() (err error) {
 	return
 }
-func (m2m *MinerToMiner) ReceiveAndFlood() (err error) {
+func (m2m *MinerToMiner) ReceiveBlock(Block) (err error) {
 	return
 }
 
@@ -262,24 +261,47 @@ func (m2s *MinerToServer) HeartbeatServer() (err error) {
 	return
 }
 
-func (ink IMiner) Mine() (err error) {
-	var i uint64
-	ink.currentBlock.Ops = bufferedOps // TODO: will this break everything?
+func (ink IMiner) Mine(newOps chan Operation, newBlock chan Block) (foundBlock chan Block, err error) {
+	foundBlock = make(chan Block)
+	var i uint64 = 0
+	opQueue := make([]Operation, 0)
+	difficulty := ink.settings.PoWDifficultyNoOpBlock
 
-	for i = 0; i < math.MaxUint64; i++ {
-		nonce := strconv.FormatUint(i, 10)
-		difficulty := ink.settings.PoWDifficultyNoOpBlock
-		if len(ink.currentBlock.Ops) != 0 {
-			difficulty = ink.settings.PoWDifficultyOpBlock
+	var currentBlock Block
+
+	go func() {
+		for {
+			select {
+			case b := <-newBlock:
+				currentBlock = Block{
+					PrevHash: block2hash(&b),
+					MinedBy:  ink.key.PublicKey,
+					Ops:      append(currentBlock.Ops, opQueue...),
+				}
+				opQueue = make([]Operation, 0)
+				difficulty = ink.settings.PoWDifficultyNoOpBlock
+				if len(currentBlock.Ops) != 0 {
+					difficulty = ink.settings.PoWDifficultyOpBlock
+				}
+				i = 0
+
+			case o := <-newOps:
+				opQueue = append(opQueue, o)
+
+			default:
+				i++
+				currentBlock.Nonce = strconv.FormatUint(i, 10)
+				if validateBlock(&currentBlock, difficulty) {
+					// successfully found nonce
+					log.Printf("found nonce: %s", currentBlock.Nonce)
+					foundBlock <- currentBlock                                                            // spit out the found block via channel
+					currentBlock = Block{PrevHash: block2hash(&currentBlock), MinedBy: ink.key.PublicKey} // TODO: change inkTransaction
+					i = 0
+				}
+			}
 		}
-		if validateNonce(ink.currentBlock, nonce, difficulty) {
-			// Broadcast nonce
-			log.Println(nonce)
-			ink.Mine() // Burn the CPU
-		}
-	}
-	log.Println("This should not happen")
-	return nil
+	}()
+	return foundBlock, nil
 }
 
 var ink IMiner
@@ -363,15 +385,21 @@ func main() {
 	miner2server.Register()
 	err = miner2server.GetNodes()
 
-	genesisBlock := &Block{
+	genesisBlock := Block{
 		PrevHash: ink.settings.GenesisBlockHash,
 		MinedBy: priv.PublicKey,
 	}
-	ink.currentBlock = genesisBlock
 
 	fmt.Println(err, ink.neighbours)
 
-	go ink.Mine()
+	newOpsCH := make(chan Operation)
+	newBlockCH := make(chan Block)
+	foundBlockCH, err := ink.Mine(newOpsCH, newBlockCH)
+
+	newBlockCH <- genesisBlock
+
+	h := <-foundBlockCH
+	fmt.Println(h, h.PrevHash, genesisBlock)
 
 	// Heartbeat server
 	for {
@@ -401,12 +429,7 @@ func block2string(block *Block) string {
 	return string(res1B)
 }
 
-func validateBlock(block *Block, nonce string, difficulty uint8) bool {
-	return validateNonce(block, nonce, difficulty)
-}
-
-func validateNonce(block *Block, nonce string, difficulty uint8) bool {
-	block.Nonce = nonce
+func validateBlock(block *Block, difficulty uint8) bool {
 	return strings.HasSuffix(block2hash(block), strings.Repeat("0", int(difficulty)))
 }
 
