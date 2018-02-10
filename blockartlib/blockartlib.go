@@ -7,13 +7,11 @@ package blockartlib
 
 import (
 	"crypto/ecdsa"
-	"crypto/elliptic"
 	"crypto/md5"
 	"crypto/x509"
 	"encoding/gob"
 	"encoding/hex"
 	"fmt"
-	"io"
 	"net/rpc"
 )
 
@@ -171,7 +169,6 @@ type Canvas interface {
 // - DisconnectedError
 func OpenCanvas(minerAddr string, privKey ecdsa.PrivateKey) (canvas Canvas, setting CanvasSettings, err error) {
 	gob.Register(ecdsa.PrivateKey{})
-	gob.Register(&elliptic.CurveParams{})
 
 	client, err := rpc.Dial("tcp", minerAddr)
 	if err != nil {
@@ -304,14 +301,8 @@ func (c BACanvas) CloseCanvas() (inkRemaining uint32, err error) {
 // <EXTRA STUFF>
 
 func hashPrivateKey(key ecdsa.PrivateKey) [16]byte {
-	h := md5.New()
-	hexString, _ := encodeKey(key)
-	_, err := io.WriteString(h, hexString)
-	if err != nil {
-		fmt.Println(err)
-		return [16]byte{}
-	}
-	return md5.Sum(nil)
+	keyBytes, _ := x509.MarshalECPrivateKey(&key)
+	return md5.Sum(keyBytes)
 }
 
 func encodeKey(key ecdsa.PrivateKey) (string, error) {

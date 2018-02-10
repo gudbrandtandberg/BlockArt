@@ -63,13 +63,15 @@ func main() {
 
 	keyBytes, err := ioutil.ReadFile("keys/key.txt")
 	privKey, err := decodeKey(string(keyBytes))
+	if err != nil {
+		fmt.Println("Could not decode key")
+	}
 
 	//Open a canvas.
-	canvas, settings, err := blockartlib.OpenCanvas(minerAddr, *privKey)
+	canvas, _, err := blockartlib.OpenCanvas(minerAddr, *privKey)
 	if checkError(err) != nil {
 		return
 	}
-	fmt.Println(settings)
 
 	validateNum := uint8(2)
 

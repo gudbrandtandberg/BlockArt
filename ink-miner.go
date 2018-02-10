@@ -21,7 +21,6 @@ import (
 	"errors"
 	"flag"
 	"fmt"
-	"io"
 	"io/ioutil"
 	"log"
 	"math"
@@ -426,10 +425,6 @@ func main() {
 		fmt.Println(err)
 	}
 
-	// For now: write key to file
-	keyString, _ := encodeKey(*priv)
-	ioutil.WriteFile("./keys/key.txt", []byte(keyString), 0666)
-
 	ipPort := flag.String("i", "127.0.0.1:12345", "RPC server ip:port")
 	client, err := rpc.Dial("tcp", *ipPort)
 
@@ -442,6 +437,9 @@ func main() {
 		neighbours:   make(map[string]*rpc.Client),
 	}
 
+	// For now: write key to file
+	keyString, _ := encodeKey(*priv)
+	ioutil.WriteFile("./keys/key.txt", []byte(keyString), 0666)
 	// Listen incoming RPC calls from artnodes
 	listenForArtNodes()
 }
@@ -491,14 +489,8 @@ func listenForArtNodes() {
 }
 
 func hashPrivateKey(key ecdsa.PrivateKey) [16]byte {
-	h := md5.New()
-	hexString, _ := encodeKey(key)
-	_, err := io.WriteString(h, hexString)
-	if err != nil {
-		fmt.Println(err)
-		return [16]byte{}
-	}
-	return md5.Sum(nil)
+	keyBytes, _ := x509.MarshalECPrivateKey(&key)
+	return md5.Sum(keyBytes)
 }
 func decodeKey(hexStr string) (key *ecdsa.PrivateKey, err error) {
 	keyBytes, err := hex.DecodeString(hexStr)
