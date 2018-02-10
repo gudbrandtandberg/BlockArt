@@ -447,7 +447,41 @@ func circleContainsPoint(circle CircleShape, point Point2d) bool {
 }
 
 func circlesIntersect(c1, c2 CircleShape) bool {
-	return euclidDist(c1.center(), c2.center()) <= c1.radius()+c2.radius()
+
+	delta := euclidDist(c1.center(), c2.center())
+	if delta > c1.radius()+c2.radius() {
+		return false
+	}
+
+	minRad := argmin(c1.radius(), c2.radius()) + 1
+	fmt.Println(minRad)
+	if minRad == 1 { // c1 is smallest
+		if delta-c1.radius() <= c2.radius() {
+			if c2.fill != "transparent" {
+				return true
+			}
+		}
+	} else if minRad == 2 { //c2 is smallest
+		if delta-c2.radius() <= c1.radius() {
+			if c1.fill != "transparent" {
+				return true
+			}
+		}
+	}
+
+	return false
+}
+
+func argmin(x ...float64) int {
+	min := math.MaxFloat64
+	arg := 0
+	for i, num := range x {
+		if num < min {
+			min = num
+			arg = i
+		}
+	}
+	return arg
 }
 
 // openIntersects is true if any of the lines in the first shape
