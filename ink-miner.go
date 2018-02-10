@@ -34,10 +34,10 @@ import (
 
 type MinerToMinerInterface interface {
 	ConnectToNeighbour() error
-	FloodToPeers() error
+	FloodToPeers(Block) error
 	HeartbeatNeighbours() error
 	RegisterNeighbour() error
-	ReceiveAndFlood() error
+	ReceiveBlock(Block) error
 }
 
 ////// TCP RPC calls to make against server
@@ -101,8 +101,24 @@ type IMiner struct {
 
 	tails []*Block
 	currentBlock *Block
-
 	key ecdsa.PrivateKey
+}
+
+type Operation struct {
+	// todo: define this better
+	ValidateNum uint8
+	// ShapeType ShapeType
+	ShapeSvgString string
+	Fill string
+	Stroke string
+}
+
+type Block struct {
+	PrevHash string
+	Ops []Operation
+	InkTransaction int32
+	Key ecdsa.PublicKey
+	Nonce uint32
 }
 
 type Operation struct {
@@ -132,7 +148,7 @@ func (m2m *MinerToMiner) ConnectToNeighbour() (err error) {
 	return
 }
 
-func (m2m *MinerToMiner) FloodToPeers() (err error) {
+func (m2m *MinerToMiner) FloodToPeers(Block) (err error) {
 	return
 }
 
@@ -146,7 +162,7 @@ func (m2m *MinerToMiner) HeartbeatNeighbours() (err error) {
 func (m2m *MinerToMiner) RegisterNeighbour() (err error) {
 	return
 }
-func (m2m *MinerToMiner) ReceiveAndFlood() (err error) {
+func (m2m *MinerToMiner) ReceiveBlock(Block) (err error) {
 	return
 }
 
