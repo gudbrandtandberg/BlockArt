@@ -25,7 +25,6 @@ import (
 	"net/rpc"
 	"strconv"
 	"strings"
-	"time"
 )
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -346,50 +345,58 @@ func main() {
 		neighbours:   make(map[net.Addr]*rpc.Client),
 	}
 
-	// Register with server
-	miner2server.Register()
-	err = miner2server.GetNodes()
+	// // Register with server
+	// miner2server.Register()
+	// err = miner2server.GetNodes()
 
-	genesisBlock := Block{
-		PrevHash: ink.settings.GenesisBlockHash,
-		MinedBy:  priv.PublicKey,
-	}
+	// genesisBlock := Block{
+	// 	PrevHash: ink.settings.GenesisBlockHash,
+	// 	MinedBy:  priv.PublicKey,
+	// }
 
-	fmt.Println(err, ink.neighbours)
+	// fmt.Println(err, ink.neighbours)
+	// _ = genesisBlock
+	// Start mining
+	// newOpsCH := make(chan Operation)
+	// newBlockCH := make(chan Block)
+	// foundBlockCH, err := ink.Mine(newOpsCH, newBlockCH)
 
-	newOpsCH := make(chan Operation)
-	newBlockCH := make(chan Block)
-	foundBlockCH, err := ink.Mine(newOpsCH, newBlockCH)
+	// newBlockCH <- genesisBlock
 
-	newBlockCH <- genesisBlock
+	// h := <-foundBlockCH
+	// fmt.Println(h, h.PrevHash, genesisBlock)
 
-	h := <-foundBlockCH
-	fmt.Println(h, h.PrevHash, genesisBlock)
+	// Listen incoming RPC calls from artnodes
+	listenForClients()
 
 	// Heartbeat server
-	for {
-		go miner2server.HeartbeatServer()
-		go miner2miner.HeartbeatNeighbours()
+	// for {
+	// 	go miner2server.HeartbeatServer()
+	// 	go miner2miner.HeartbeatNeighbours()
 
-		time.Sleep(time.Millisecond * 50)
-	}
+	// 	time.Sleep(time.Millisecond * 50)
+	// }
 }
 
 type RMiner int
 
-func (m *RMiner) OpenCanvas(args interface{}, reply *interface{}) error {
-	fmt.println("New ArtNode connecting")
+func (m *RMiner) OpenCanvas(args string, reply *int) error {
+	fmt.Println("New ArtNode connecting")
 
 	return nil
 }
 
 func listenForClients() {
+
 	artServer := rpc.NewServer()
 	rminer := new(RMiner)
 	artServer.Register(rminer)
-	l, err := net.Listen("tcp", ink.localAddr)
-
-	outLog.Printf("Artserver started. Receiving on %s\n", ink.localAddr)
+	l, err := net.Listen("tcp", "127.0.0.1:9878") // get address from global ink
+	if err != nil {
+		fmt.Println(err)
+		return
+	}
+	fmt.Printf("Artserver started. Receiving on %s\n", ink.localAddr)
 	for {
 		conn, _ := l.Accept()
 		go artServer.ServeConn(conn)
