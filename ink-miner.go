@@ -138,7 +138,7 @@ type Block struct {
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 func (art MinerFromANode) GetGenesisBlock(input string, hash *string) (err error) {
-	*hash = ink.settings.GenesisBlockHash
+	*hash = ink.settings.GenesisBlockHash // TODO: This hash does not have a block
 	return
 }
 
@@ -227,7 +227,7 @@ func (m2m *MinerToMiner) ReceiveBlock(block *Block, reply *bool) (err error) {
 		difficulty = ink.settings.PoWDifficultyOpBlock
 	}
 	if validateBlock(block, difficulty) {
-		fmt.Println("trying to validate", ink.getBlockChainHeads())
+		fmt.Println("trying to validate")
         if debugLocks { fmt.Println("locking8") }
 		maplock.Lock()
         if debugLocks { fmt.Println("locked8") }
@@ -490,17 +490,15 @@ func (ink IMiner) Length(hash string) (len int) {
 	return ink.LengthFromTo(hash, ink.settings.GenesisBlockHash)
 }
 
-func (ink IMiner) LengthFromTo(fromHash string, toHash string) (len int) {
+func (ink IMiner) LengthFromTo(from string, to string) (length int) {
     if debugLocks { fmt.Println("locking11") }
 	maplock.Lock()
     if debugLocks { fmt.Println("locked11") }
-	from := fromHash
-	to := toHash
 	for from != to {
-		len += 1
+		length += 1
 		block, ok := blocks[from]
 		if !ok {
-			len = 0
+			length = 0
 			break
 		}
 		from = block.PrevHash
@@ -570,7 +568,7 @@ func openRPCToServer() (client *rpc.Client, err error) {
 
 func getGenesisBlock() (Block) {
 	return Block{
-		PrevHash: "foobar",
+		PrevHash: ink.settings.GenesisBlockHash,
 		Nonce:    "1337",
 		MinedBy:  ecdsa.PublicKey{},
 	}
