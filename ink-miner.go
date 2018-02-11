@@ -32,8 +32,9 @@ import (
 	"strings"
 	"sync"
 	"time"
-	"testing/quick"
 )
+
+const debugLocks = false
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////
 //											START OF INTERFACES												 //
@@ -170,18 +171,18 @@ func (m2m2 *MinerToMiner) GetHeartbeats(inc string, out *string) (err error) {
 }
 
 func (m2m *MinerToMiner) FetchBlockChain(i string, blockchain *[]Block) (err error) {
-	fmt.Println("locking7")
+    if debugLocks { fmt.Println("locking7") }
 	maplock.Lock()
-	fmt.Println("locked7")
+    if debugLocks { fmt.Println("locked7") }
 	v := make([]Block, 0, len(blocks))
 	for _, value := range blocks {
 		v = append(v, value)
 	}
 	*blockchain = v
 
-	fmt.Println("unlocking7")
+	if debugLocks { fmt.Println("unlocking7") }
 	maplock.Unlock()
-	fmt.Println("unlocked7")
+	if debugLocks { fmt.Println("unlocked7") }
 	return
 }
 
@@ -227,27 +228,27 @@ func (m2m *MinerToMiner) ReceiveBlock(block *Block, reply *bool) (err error) {
 	}
 	if validateBlock(block, difficulty) {
 		fmt.Println("trying to validate", ink.getBlockChainHeads())
-		fmt.Println("locking8")
+        if debugLocks { fmt.Println("locking8") }
 		maplock.Lock()
-		fmt.Println("locked8")
+        if debugLocks { fmt.Println("locked8") }
 		_, ok := blocks[block.PrevHash]
-		fmt.Println("unlocking8")
+		if debugLocks { fmt.Println("unlocking8") }
 		maplock.Unlock()
-		fmt.Println("unlocked8")
+		if debugLocks { fmt.Println("unlocked8") }
 		if ok {
 			fmt.Println("channel ")
 			newBlockCH <- remoteBlock
 			fmt.Println("channel2")
-			fmt.Println("locking13")
+            if debugLocks { fmt.Println("locking13") }
 			maplock.Lock()
-			fmt.Println("locked13")
+            if debugLocks { fmt.Println("locked13") }
 			hashes := make([]string, 0)
 			for k, _ := range blocks {
 				hashes = append(hashes, k)
 			}
-			fmt.Println("unlocking13")
+			if debugLocks { fmt.Println("unlocking13") }
 			maplock.Unlock()
-			fmt.Println("unlocked13")
+			if debugLocks { fmt.Println("unlocked13") }
 			for _, k := range hashes {
 				fmt.Println("k, validationcount, length(k): ", k, ink.ValidationCount(k), ink.Length(k))
 			}
@@ -351,9 +352,9 @@ func (ink IMiner) GetLongestChain() (block *Block, err error) {
 }
 
 func (ink IMiner) GetBlockChain() (err error) {
-	fmt.Println("locking9")
+    if debugLocks { fmt.Println("locking9") }
 	maplock.Lock()
-	fmt.Println("locked9")
+    if debugLocks { fmt.Println("locked9") }
 	for _, neighbour := range ink.neighbours {
 		blockChain := make([]Block, 0)
 		err = neighbour.Call("MinerToMiner.FetchBlockChain", "", &blockChain)
@@ -362,42 +363,42 @@ func (ink IMiner) GetBlockChain() (err error) {
 			blocks[block2hash(&block)] = block
 		}
 	}
-	fmt.Println("unlocking9")
+	if debugLocks { fmt.Println("unlocking9") }
 	maplock.Unlock()
-	fmt.Println("unlocked9")
+	if debugLocks { fmt.Println("unlocked9") }
 	return
 }
 
-func (ink IMiner) ProcessNewBlock(b *Block, currentBlock *Block, opQueue *[]Operation) {
-	fmt.Println("locking10")
+func (ink IMiner) ProcessNewBlock(b *Block, currentBlock *Block, opQueue []Operation) {
+    if debugLocks { fmt.Println("locking10") }
 	maplock.Lock()
-	fmt.Println("locked10")
+    if debugLocks { fmt.Println("locked10") }
 	blocks[block2hash(b)] = *b
-	fmt.Println("unlocking10")
+	if debugLocks { fmt.Println("unlocking10") }
 	maplock.Unlock()
-	fmt.Println("unlocked10")
-	currentBlock = &Block{
+	if debugLocks { fmt.Println("unlocked10") }
+	*currentBlock = Block{
 		PrevHash: block2hash(b),
 		MinedBy:  ink.key.PublicKey,
-		Ops:      append(currentBlock.Ops, *opQueue...),
+		Ops:      append(currentBlock.Ops, opQueue...),
 	}
 }
 
-func (ink IMiner) ProcessMinedBlock(currentBlock *Block, opQueue *[]Operation) {
+func (ink IMiner) ProcessMinedBlock(currentBlock *Block, opQueue []Operation) {
 	log.Printf("found nonce: %s", currentBlock.Nonce)
 	prevHash := block2hash(currentBlock)
-	fmt.Println("locking")
+    if debugLocks { fmt.Println("locking") }
 	maplock.Lock()
-	fmt.Println("locked")
+    if debugLocks { fmt.Println("locked") }
 	blocks[prevHash] = *currentBlock
-	fmt.Println("unlocking")
+	if debugLocks { fmt.Println("unlocking") }
 	maplock.Unlock()
-	fmt.Println("unlocked")
+	if debugLocks { fmt.Println("unlocked") }
 	foundBlockCH <- *currentBlock // spit out the found block via channel
-	currentBlock = &Block{
+	*currentBlock = Block{
 		PrevHash: prevHash,
 		MinedBy:  ink.key.PublicKey,
-		Ops:      *opQueue,
+		Ops:      opQueue,
 	}
 }
 
@@ -411,7 +412,7 @@ func (ink IMiner) Mine() (err error) {
 		for {
 			select {
 			case b := <-newBlockCH:
-				ink.ProcessNewBlock(&b, &currentBlock, &opQueue)
+				ink.ProcessNewBlock(&b, &currentBlock, opQueue)
 				opQueue = make([]Operation, 0)
 				i = 0
 
@@ -426,7 +427,7 @@ func (ink IMiner) Mine() (err error) {
 				}
 				currentBlock.Nonce = strconv.FormatUint(i, 10)
 				if validateBlock(&currentBlock, difficulty) {
-					ink.ProcessMinedBlock(&currentBlock, &opQueue)
+					ink.ProcessMinedBlock(&currentBlock, opQueue)
 					opQueue = make([]Operation, 0)
 					i = 0
 				}
@@ -437,20 +438,20 @@ func (ink IMiner) Mine() (err error) {
 }
 
 func (ink IMiner) GetGenesisBlock() (genesis Block) {
-	fmt.Println("locking2")
+    if debugLocks { fmt.Println("locking2") }
 	maplock.Lock()
-	fmt.Println("locked2")
+    if debugLocks { fmt.Println("locked2") }
 	genesisBlock := blocks[ink.settings.GenesisBlockHash]
-	fmt.Println("unlocking2")
+	if debugLocks { fmt.Println("unlocking2") }
 	maplock.Unlock()
-	fmt.Println("unlocked2")
+	if debugLocks { fmt.Println("unlocked2") }
 	return genesisBlock
 }
 
 func (ink IMiner) GetChildren(hash string) (children []Block) {
-	fmt.Println("locking3")
+    if debugLocks { fmt.Println("locking3") }
 	maplock.Lock()
-	fmt.Println("locked3")
+    if debugLocks { fmt.Println("locked3") }
 	children = make([]Block, 0)
 	for _, block := range blocks {
 		if block.PrevHash == hash {
@@ -458,16 +459,16 @@ func (ink IMiner) GetChildren(hash string) (children []Block) {
 		}
 	}
 
-	fmt.Println("unlocking3")
+	if debugLocks { fmt.Println("unlocking3") }
 	maplock.Unlock()
-	fmt.Println("unlocked3")
+	if debugLocks { fmt.Println("unlocked3") }
 	return
 }
 
 func (ink IMiner) getBlockChainHeads() (heads []Block) {
-	fmt.Println("locking4")
+    if debugLocks { fmt.Println("locking4") }
 	maplock.Lock()
-	fmt.Println("locked4")
+    if debugLocks { fmt.Println("locked4") }
 	possibilities := make(map[string]Block)
 	for k, v := range blocks {
 		possibilities[k] = v
@@ -479,9 +480,9 @@ func (ink IMiner) getBlockChainHeads() (heads []Block) {
 		heads = append(heads, v)
 	}
 
-	fmt.Println("unlocking4")
+	if debugLocks { fmt.Println("unlocking4") }
 	maplock.Unlock()
-	fmt.Println("unlocked4")
+	if debugLocks { fmt.Println("unlocked4") }
 	return
 }
 
@@ -490,9 +491,9 @@ func (ink IMiner) Length(hash string) (len int) {
 }
 
 func (ink IMiner) LengthFromTo(fromHash string, toHash string) (len int) {
-	fmt.Println("locking11")
+    if debugLocks { fmt.Println("locking11") }
 	maplock.Lock()
-	fmt.Println("locked11")
+    if debugLocks { fmt.Println("locked11") }
 	from := fromHash
 	to := toHash
 	for from != to {
@@ -504,9 +505,9 @@ func (ink IMiner) LengthFromTo(fromHash string, toHash string) (len int) {
 		}
 		from = block.PrevHash
 	}
-	fmt.Println("unlocking11")
+	if debugLocks { fmt.Println("unlocking11") }
 	maplock.Unlock()
-	fmt.Println("unlocked11")
+	if debugLocks { fmt.Println("unlocked11") }
 	return
 }
 
