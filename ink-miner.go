@@ -492,7 +492,7 @@ func (m *RMiner) RecordDeleteOp(op Operation, reply *string) error {
 }
 
 func (m *RMiner) RecordAddOp(op Operation, reply *string) error {
-	fmt.Println("Will add:")
+	fmt.Println("Will add this shape to my current block:")
 	fmt.Println(op.SVG)
 	return nil
 }

@@ -7,13 +7,12 @@ package main
 
 import (
 	"crypto/ecdsa"
-	"crypto/elliptic"
-	"crypto/rand"
 	"crypto/x509"
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"html/template"
+	"io/ioutil"
 	"log"
 	"net"
 	"net/http"
@@ -37,14 +36,9 @@ func serveIndex(w http.ResponseWriter, req *http.Request) {
 
 	// This is a bit circular: webserver gives the client an identity,
 	// then client shows webserver its identity.. fix registration here.
-	curve := elliptic.P384()
-	key, _ := ecdsa.GenerateKey(curve, rand.Reader)
-	keyString, err := encodeKey(*key)
-	if err != nil {
-		fmt.Println(err)
-	}
+	keyBytes, err := ioutil.ReadFile("keys/key.txt")
 
-	data := cvsData{PageTitle: "BlockArt Client App", Key: keyString}
+	data := cvsData{PageTitle: "BlockArt Client App", Key: string(keyBytes[:])}
 
 	tmpl, err := template.ParseFiles("html/index.html")
 	if err != nil {
