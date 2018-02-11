@@ -771,9 +771,6 @@ func block2string(block *Block) string {
 		Check that the nonce for the block is valid: PoW is correct and has the right difficulty.
 		Check that each operation in the block has a valid signature (this signature should be generated using the private key and the operation).
 		Check that the previous block hash points to a legal, previously generated, block.
-<<<<<<< HEAD
-=======
-
 >>>>>>> 02c4270da860c3cff88e5410d1b8ca5832ea1e01
 */
 func validateBlock(block *Block, difficulty uint8) bool {
