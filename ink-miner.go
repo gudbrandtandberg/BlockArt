@@ -36,6 +36,8 @@ type MinerToMinerInterface interface {
 	FloodToPeers(block *Block) error
 	HeartbeatNeighbours() error
 	GetHeartbeats() error
+	GetBlockChain() (err error)
+	FetchBlockChain(i string, blockchain *[]Block) (err error)
 	RegisterNeighbour() error
 	ReceiveBlock(block *Block, reply *bool) (err error)
 }
@@ -144,7 +146,7 @@ func (m2m *MinerToMiner) ConnectToNeighbour() (err error) {
 }
 
 func (m2m *MinerToMiner) FloodToPeers(block *Block) (err error) {
-	fmt.Println("Sent", block.Nonce, block2hash(block))
+	fmt.Println("Sent", block.Nonce, block2hash(block), block2string(block))
 	fmt.Println(block.PrevHash, block.Nonce, block.Ops, block.MinedBy)
 	m2m.HeartbeatNeighbours()
 
@@ -158,6 +160,15 @@ func (m2m *MinerToMiner) FloodToPeers(block *Block) (err error) {
 
 func (m2m2 *MinerToMiner) GetHeartbeats(inc string, out *string) (err error) {
 	*out = "hello i'm online"
+	return
+}
+
+func (m2m *MinerToMiner) FetchBlockChain(i string, blockchain *[]Block) (err error) {
+	v := make([]Block, 0, len(blocks))
+	for  _, value := range blocks {
+		v = append(v, value)
+	}
+	*blockchain = v
 	return
 }
 
@@ -196,7 +207,7 @@ func (m2m *MinerToMiner) RegisterNeighbour() (err error) {
 }
 
 func (m2m *MinerToMiner) ReceiveBlock(block *Block, reply *bool) (err error) {
-	fmt.Println("Received", block.Nonce, block2hash(block))
+	fmt.Println("Received", block.Nonce, block2hash(block), block2string(block))
 	fmt.Println(block.PrevHash, block.Nonce, block.Ops, block.MinedBy)
 	difficulty := ink.settings.PoWDifficultyNoOpBlock
 	if len(block.Ops) != 0 {
@@ -204,15 +215,21 @@ func (m2m *MinerToMiner) ReceiveBlock(block *Block, reply *bool) (err error) {
 	}
 	if validateBlock(block, difficulty) {
 		fmt.Println("trying to validate", ink.getBlockChainHeads())
-		for _, head := range ink.getBlockChainHeads() {
-			fmt.Println("checking", head.PrevHash, block.PrevHash)
+		_, ok := blocks[block.PrevHash]
+		if ok {
+			newBlockCH <- *block
+		} else {
+			log.Println("tsk tsk Received block does not append to a head")
+		}
+		/*for _, head := range ink.getBlockChainHeads() {
+			fmt.Println("checking", block2hash(&head), block.PrevHash)
 			if block2hash(&head) == block.PrevHash {
 				fmt.Println("validated")
 				newBlockCH <- *block
 			} else {
 				log.Println("tsk tsk Received block does not append to a head")
 			}
-		}
+		}*/
 	} else {
 		fmt.Println("Not valid", block.PrevHash, block2hash(block))
 	}
@@ -300,6 +317,18 @@ func (m2s *MinerToServer) HeartbeatServer() (err error) {
 	//client.Call("RServer.HeartBeat", nil, &ignored)
 	err = ink.serverClient.Call("RServer.HeartBeat", ink.key.PublicKey, &ignored)
 	//	fmt.Println("Sent HB:", ignored, err)
+	return
+}
+
+func (ink IMiner) GetBlockChain() (err error) {
+	for _, neighbour := range ink.neighbours {
+		blockChain := make([]Block, 0)
+		err = neighbour.Call("MinerToMiner.FetchBlockChain", "", &blockChain)
+		fmt.Println("nei", err, blockChain)
+		for _, block := range blockChain {
+			blocks[block2hash(&block)] = block
+		}
+	}
 	return
 }
 
@@ -424,6 +453,7 @@ func main() {
 	gob.Register(&net.TCPAddr{})
 	gob.Register(&elliptic.CurveParams{})
 	gob.Register(&MinerInfo{})
+	gob.Register(&[]Block{})
 
 	blocks = make(map[string]Block)
 
@@ -450,6 +480,9 @@ func main() {
 	// Register with server
 	miner2server.Register()
 	err = miner2server.GetNodes()
+	err = ink.GetBlockChain()
+
+	fmt.Println("Blocks:", len(blocks))
 	checkError(err)
 
 	genesisBlock := Block{
@@ -497,6 +530,10 @@ func block2hash(block *Block) string {
 }
 
 func block2string(block *Block) string {
+//	res, _ := json.Marshal(block.Ops)
+	return block.PrevHash + block.Nonce + block.MinedBy.X.String() + block.MinedBy.Y.String()
+
+
 	res1B, err := json.Marshal(*block)
 	if err != nil {
 		log.Println(err)
