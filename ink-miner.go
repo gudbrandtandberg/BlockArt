@@ -10,6 +10,8 @@ go run ink-miner.go [server ip:port] [pubKey] [privKey]
 package main
 
 import (
+	//"./blockartlib"
+	"bytes"
 	"crypto/ecdsa"
 	"crypto/elliptic"
 	"crypto/md5"
@@ -23,6 +25,7 @@ import (
 	"fmt"
 	"io/ioutil"
 	"log"
+	"math"
 	"math/big"
 	"net"
 	"net/rpc"
@@ -36,11 +39,9 @@ import (
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 type MinerToMinerInterface interface {
-	ConnectToNeighbour() error
 	FloodToPeers(block *Block) error
 	HeartbeatNeighbours() error
 	GetHeartbeats() error
-	RegisterNeighbour() error
 	ReceiveBlock(block *Block, reply *bool) (err error)
 }
 
@@ -80,7 +81,7 @@ type IMinerInterface interface {
 	// or []byte ??
 
 	// Just a disconnected error? other errors will be handled by methods called within mine
-
+	GetLongestChain() (Block, error)
 	Mine() error
 }
 
@@ -116,9 +117,15 @@ type Operation struct {
 	Owner   ecdsa.PublicKey
 	ValNum  uint8
 }
+
 type SVGHash struct {
 	Hash []byte
 	R, S *big.Int
+}
+
+type BlockNode struct {
+	Block    Block
+	Children []BlockNode
 }
 
 type Block struct {
@@ -144,20 +151,24 @@ func (e InvalidBlockHashError) Error() string {
 }
 
 func (art MinerFromANode) GetChildren(hash string, childrenHashes *[]string) (err error) {
-	for _, block := range ink.GetChildren(hash) {
-		*childrenHashes = append(*childrenHashes, block2hash(&block))
+	nodesToCheck := make([]BlockNode, 0, math.MaxUint32)
+	nodesToCheck = append(nodesToCheck, genesisNode)
+	for len(nodesToCheck) > 0 {
+		var node BlockNode = nodesToCheck[0]
+		if block2hash(&node.Block) == hash {
+			*childrenHashes = make([]string, 0, len(node.Children))
+			for _, child := range node.Children {
+				*childrenHashes = append(*childrenHashes, block2hash(&child.Block))
+			}
+			return
+		}
+		nodesToCheck = append(nodesToCheck, node.Children...)
 	}
-	return // TODO: ERROR
-}
-
-func (m2m *MinerToMiner) ConnectToNeighbour() (err error) {
-	return
+	return InvalidBlockHashError(hash)
 }
 
 func (m2m *MinerToMiner) FloodToPeers(block *Block) (err error) {
 	fmt.Println("Sent", block.Nonce, block2hash(block))
-	fmt.Println(block.PrevHash, block.Nonce, block.Ops, block.MinedBy)
-	m2m.HeartbeatNeighbours()
 
 	for _, neighbour := range ink.neighbours {
 		var reply bool
@@ -202,30 +213,23 @@ func (m2m *MinerToMiner) HeartbeatNeighbours() (err error) {
 	}
 }
 
-func (m2m *MinerToMiner) RegisterNeighbour() (err error) {
-	return
-}
-
 func (m2m *MinerToMiner) ReceiveBlock(block *Block, reply *bool) (err error) {
 	fmt.Println("Received", block.Nonce, block2hash(block))
-	fmt.Println(block.PrevHash, block.Nonce, block.Ops, block.MinedBy)
+
 	difficulty := ink.settings.PoWDifficultyNoOpBlock
 	if len(block.Ops) != 0 {
 		difficulty = ink.settings.PoWDifficultyOpBlock
 	}
 	if validateBlock(block, difficulty) {
-		fmt.Println("trying to validate", ink.getBlockChainHeads())
+		fmt.Println("trying to validate")
 		for _, head := range ink.getBlockChainHeads() {
-			fmt.Println("checking", head.PrevHash, block.PrevHash)
-			if block2hash(&head) == block.PrevHash {
+			if block2hash(&head.Block) == block.PrevHash {
 				fmt.Println("validated")
 				newBlockCH <- *block
 			} else {
 				log.Println("tsk tsk Received block does not append to a head")
 			}
 		}
-	} else {
-		fmt.Println("Not valid", block.PrevHash, block2hash(block))
 	}
 	return
 }
@@ -314,6 +318,10 @@ func (m2s *MinerToServer) HeartbeatServer() (err error) {
 	return
 }
 
+func (ink IMiner) GetLongestChain() (block *Block, err error) {
+	return block, err
+}
+
 func (ink IMiner) Mine() (err error) {
 	var i uint64 = 0
 	opQueue := make([]Operation, 0)
@@ -321,11 +329,17 @@ func (ink IMiner) Mine() (err error) {
 
 	var currentBlock Block
 
+	/*
+	   type Operation struct {
+	   	Svg string
+	   	SvgHash SVGHash
+	   	Owner ecdsa.PublicKey
+	   }
+	*/
 	go func() {
 		for {
 			select {
 			case b := <-newBlockCH:
-				blocks[block2hash(&b)] = b
 				currentBlock = Block{
 					PrevHash: block2hash(&b),
 					MinedBy:  ink.key.PublicKey,
@@ -343,23 +357,12 @@ func (ink IMiner) Mine() (err error) {
 
 			default:
 				i++
-				if i%50000 == 0 {
-					fmt.Println("mining:", block2hash(&currentBlock), currentBlock.PrevHash)
-				}
 				currentBlock.Nonce = strconv.FormatUint(i, 10)
 				if validateBlock(&currentBlock, difficulty) {
 					// successfully found nonce
 					log.Printf("found nonce: %s", currentBlock.Nonce)
-					prevHash := block2hash(&currentBlock)
-					blocks[prevHash] = currentBlock
 					foundBlockCH <- currentBlock // spit out the found block via channel
-					//					newBlockCH <- currentBlock // spit out the found block via channel
-					currentBlock = Block{
-						PrevHash: prevHash,
-						MinedBy:  ink.key.PublicKey,
-						Ops:      opQueue,
-					}
-					opQueue = make([]Operation, 0)
+					currentBlock = Block{PrevHash: block2hash(&currentBlock), MinedBy: ink.key.PublicKey}
 					i = 0
 				}
 			}
@@ -368,30 +371,18 @@ func (ink IMiner) Mine() (err error) {
 	return nil
 }
 
-func (ink IMiner) GetGenesisBlock() (genesis Block) {
-	return blocks[ink.settings.GenesisBlockHash]
-}
-
-func (ink IMiner) GetChildren(hash string) (children []Block) {
-	children = make([]Block, 0)
-	for _, block := range blocks {
-		if block.PrevHash == hash {
-			children = append(children, block)
+func (ink IMiner) getBlockChainHeads() (heads []BlockNode) {
+	heads = make([]BlockNode, 0)
+	nodesToCheck := make([]BlockNode, 0)
+	nodesToCheck = append(nodesToCheck, genesisNode)
+	for len(nodesToCheck) > 0 {
+		var node BlockNode = nodesToCheck[0]
+		nodesToCheck = nodesToCheck[1:]
+		if len(node.Children) == 0 {
+			heads = append(heads, node)
+		} else {
+			nodesToCheck = append(nodesToCheck, node.Children...)
 		}
-	}
-	return
-}
-
-func (ink IMiner) getBlockChainHeads() (heads []Block) {
-	possibilities := make(map[string]Block)
-	for k, v := range blocks {
-		possibilities[k] = v
-	}
-	for _, block := range blocks {
-		delete(possibilities, block.PrevHash)
-	}
-	for _, v := range possibilities {
-		heads = append(heads, v)
 	}
 	return
 }
@@ -405,6 +396,8 @@ var blocks map[string]Block
 var newOpsCH (chan Operation)
 var newBlockCH (chan Block)
 var foundBlockCH (chan Block)
+
+var genesisNode BlockNode
 
 func tmp() net.Addr {
 	server := rpc.NewServer()
@@ -422,21 +415,10 @@ func tmp() net.Addr {
 	return l.Addr()
 }
 
-func killFriends() {
-	for addr, miner := range ink.neighbours {
-		err := miner.Call("MinerToMiner.ListenHB", "", nil)
-		if err != nil {
-			delete(ink.neighbours, addr)
-		}
-	}
-}
-
 func main() {
 	gob.Register(&net.TCPAddr{})
 	gob.Register(&elliptic.CurveParams{})
 	gob.Register(&MinerInfo{})
-
-	blocks = make(map[string]Block)
 
 	newOpsCH = make(chan Operation)
 	newBlockCH = make(chan Block)
@@ -556,13 +538,166 @@ func block2string(block *Block) string {
 	return string(res1B)
 }
 
+/*
+Block validations:
+	Check that the nonce for the block is valid: PoW is correct and has the right difficulty.
+	Check that each operation in the block has a valid signature (this signature should be generated using the private key and the operation).
+	Check that the previous block hash points to a legal, previously generated, block.
+*/
 func validateBlock(block *Block, difficulty uint8) bool {
-	return validateNonce(block, difficulty)
+	validNonce := validateNonce(block, difficulty)
+	validOps := validateOps(block)
+	validPrevHash := validatePrevHash(block)
+	return (validNonce && validOps && validPrevHash)
 }
 
 func validateNonce(block *Block, difficulty uint8) bool {
 	return strings.HasSuffix(block2hash(block), strings.Repeat("0", int(difficulty)))
 }
+
+func validatePrevHash(block *Block) bool {
+	_, ok := blocks[block.PrevHash]
+	if ok {
+		return true
+	}
+	return false
+}
+
+/*
+Operation validations:
+	Check that each operation has sufficient ink associated with the public key that generated the operation.
+	Check that each operation does not violate the shape intersection policy described above.
+	Check that the operation with an identical signature has not been previously added to the blockchain (prevents operation replay attacks).
+	Check that an operation that deletes a shape refers to a shape that exists and which has not been previously deleted.
+*/
+func validateOps(block *Block) bool {
+	opSignatures := validateOpSigs(block)
+	intersections := validateIntersections(block)
+	identicalSignatures := validateIdenticalSigs(block)
+	validDelete := validateDelete(block)
+
+	return (opSignatures && intersections && identicalSignatures && validDelete)
+}
+
+//Returns true if all ops are correctly signed
+func validateOpSigs(block *Block) bool {
+	allTrue := true
+	for _, op := range block.Ops {
+		if !ecdsa.Verify(&op.Owner, op.SVGHash.Hash, op.SVGHash.R, op.SVGHash.S) {
+			allTrue = false
+		}
+	}
+	return allTrue
+}
+
+// TODO
+//Returns true if there are -NOT- any intersections with any shapes already in blockchain
+func validateIntersections(block *Block) bool {
+	return true
+}
+
+//Returns true if there is -NOT- an identical op/opsig in blockchain
+func validateIdenticalSigs(block *Block) bool {
+	noIdenticalOps := true
+	var toCheck []Operation
+	var theBlocks []Block
+	for _, op := range block.Ops {
+		//if there is same op/sig in blockchain, add it to a list to check for deletes
+		for _, b := range blocks {
+			for _, o := range b.Ops {
+				if bytes.Equal(o.SVGHash.Hash, op.SVGHash.Hash) {
+					toCheck = append(toCheck, op)
+					theBlocks = append(theBlocks, b)
+				}
+			}
+		}
+	}
+	if len(toCheck) > 0 {
+		noIdenticalOps = checkDeletes(toCheck, theBlocks)
+	}
+	return noIdenticalOps
+}
+
+//for each op, check if it is deleted in a later block. If it is, return true
+func checkDeletes(ops []Operation, blox []Block) bool {
+	tipOfChain, err := ink.GetLongestChain()
+	checkError(err)
+
+iLoop:
+	for i := 0; i < len(ops); i++ {
+		thisOp := ops[i]
+		thisBlock := blox[i]
+		currBlock := tipOfChain
+		//iterate back until thisBlock[i] is hit; if it also doesn't have delete then return false
+		for currBlock.PrevHash != thisBlock.PrevHash {
+			for _, currOp := range currBlock.Ops {
+				if currOp.Delete {
+					if bytes.Equal(currOp.SVGHash.Hash, thisOp.SVGHash.Hash) {
+						break iLoop
+					}
+				}
+			}
+			*currBlock = blocks[currBlock.PrevHash]
+		}
+		finalBlock := blocks[currBlock.PrevHash]
+		for _, currOp := range finalBlock.Ops {
+			if currOp.Delete {
+				if bytes.Equal(currOp.SVGHash.Hash, thisOp.SVGHash.Hash) {
+					break iLoop
+				}
+			}
+		}
+
+		return false
+	}
+
+	return true
+
+}
+
+//TODO
+//Returns true if shape is in blockchain and not previously deleted and is a delete
+func validateDelete(block *Block) bool {
+	allPossible := true
+	tipOfChain, err := ink.GetLongestChain()
+	checkError(err)
+	for _, op := range block.Ops {
+		if op.Delete {
+			//if it's a delete, handle it, if it's not a delete ignore
+			shapeHash := op.SVG
+			currBlock := tipOfChain
+		BlockSelectionLoop:
+			for currBlock.PrevHash != ink.settings.GenesisBlockHash {
+				for _, o := range currBlock.Ops {
+					if hex.EncodeToString(o.SVGHash.Hash) == shapeHash {
+						break BlockSelectionLoop
+					}
+				}
+				*currBlock = blocks[currBlock.PrevHash]
+			}
+			if currBlock.PrevHash == ink.settings.GenesisBlockHash {
+				return false
+			}
+		}
+	}
+	return allPossible
+}
+
+/*
+type Operation struct {
+	Delete  bool
+	SVG     string
+	SVGHash SVGHash
+	Owner   ecdsa.PublicKey
+}
+
+type SVGHash struct {
+	Hash []byte
+	R, S *big.Int
+}
+
+
+*/
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////
 //								END OF MINING, START OF UTILITIES											 //

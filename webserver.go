@@ -34,10 +34,7 @@ func serveIndex(w http.ResponseWriter, req *http.Request) {
 	fmt.Println("Serving index")
 	w.Header().Set("Access-Control-Allow-Origin", "*")
 
-	// This is a bit circular: webserver gives the client an identity,
-	// then client shows webserver its identity.. fix registration here.
 	keyBytes, err := ioutil.ReadFile("keys/key.txt")
-
 	data := cvsData{PageTitle: "BlockArt Client App", Key: string(keyBytes[:])}
 
 	tmpl, err := template.ParseFiles("html/index.html")

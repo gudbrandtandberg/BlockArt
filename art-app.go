@@ -76,12 +76,14 @@ func main() {
 	validateNum := uint8(2)
 
 	// Add a line.
-	_, _, _, err = canvas.AddShape(validateNum, blockartlib.PATH, "M 0 0 L 0 5", "transparent", "red")
+	shapeHash, _, _, err := canvas.AddShape(validateNum, blockartlib.PATH, "M 0 0 L 0 5", "transparent", "red")
 	if checkError(err) != nil {
 		return
 	}
 
-	_, err = canvas.DeleteShape(validateNum, "<shapeHash>")
+	fmt.Println("Will delete", shapeHash)
+
+	_, err = canvas.DeleteShape(validateNum, shapeHash)
 	if checkError(err) != nil {
 		return
 	}

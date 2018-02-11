@@ -248,6 +248,8 @@ func (c BACanvas) AddShape(validateNum uint8, shapeType ShapeType, shapeSvgStrin
 	op.SVG = shape.XMLString()
 	op.SVGHash = signShapeString(op.SVG, &c.privKey)
 
+	shapeHash = hex.EncodeToString(op.SVGHash.Hash)
+
 	err = minerClient.Call("RMiner.RecordAddOp", op, nil)
 	if err != nil {
 		return
@@ -331,14 +333,15 @@ func (c BACanvas) CloseCanvas() (inkRemaining uint32, err error) {
 // <EXTRA STUFF>
 
 func signShapeString(shapeString string, key *ecdsa.PrivateKey) SVGHash {
-	h := md5.New()
-	shapeHash := h.Sum([]byte(shapeString))
-	r, s, err := ecdsa.Sign(rand.Reader, key, shapeHash)
+
+	shapeHash := md5.Sum([]byte(shapeString))
+
+	r, s, err := ecdsa.Sign(rand.Reader, key, shapeHash[:])
 	if err != nil {
 		log.Fatal(errors.New("Can't sign shape"))
 	}
 
-	return SVGHash{shapeHash, r, s}
+	return SVGHash{shapeHash[:], r, s}
 }
 
 func hashPrivateKey(key ecdsa.PrivateKey) [16]byte {
