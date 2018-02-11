@@ -31,6 +31,8 @@ The ArtNode&mdash;Miner connection is implemented using remote procedure calls (
 The ```blockartlib``` library allows two types of shapes to be drawn on the cancas, __paths__ and __circles__. 
 The shapes are modelled on the SVG format. Blockartlib's ```SVGParser```-object parses user input into an internal point-based representation satisfying the ```Shape```interface. As well as arguments specifying the shape itself, we allow the two extra arguments ```fill``` and ```stroke``` to be set. The shape interface specifies two methods: ```Area()``` and ```XMLString()```. These methods are used for translating add/delete commands into operations on the mining network. Finally, the ```Intersects(shape1, shape2)``` function is used for checking if two shapes intersect. 
 
+<div style="text-align:center"><img src="html/img/Shape.png" width="500"/></div>
+Examples of valid shapes.
 
 ## Webserver
 
