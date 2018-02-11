@@ -55,8 +55,8 @@ func decodeKey(hexStr string) (key *ecdsa.PrivateKey, err error) {
 
 func main() {
 
-	// testParser()
-	// return
+	testParser()
+	return
 	minerAddr := "127.0.0.1:9878"
 	// curve := elliptic.P384()
 	// privKey, err := ecdsa.GenerateKey(curve, rand.Reader)
@@ -153,14 +153,22 @@ func testParser() {
 	fmt.Println(shape1)
 	fmt.Println(shape2)
 
-	intersects := blockartlib.Intersects(shape2, shape1)
-
+	intersects := blockartlib.Intersects(shape1, shape2)
 	fmt.Println("Shapes intersect:", intersects)
+	intersects = blockartlib.XMLStringsIntersect(shape1.XMLString(), shape2.XMLString())
+	fmt.Println("Shape XML strings intersect:", intersects)
 
 	shape3, _ := parser.Parse(blockartlib.PATH, "M 0 0 l 100 100", "transparent", "black")
 	fmt.Println(shape3.XMLString())
 
 	shape4, _ := parser.Parse(blockartlib.CIRCLE, "4, 5, 3", "transparent", "black")
 	fmt.Println(shape4.XMLString())
+
+	shape5, _ := parser.ParseXMLString(shape3.XMLString())
+	fmt.Println(shape5)
+
+	shape6, _ := parser.ParseXMLString(shape4.XMLString())
+	fmt.Println(shape6)
+
 	return
 }

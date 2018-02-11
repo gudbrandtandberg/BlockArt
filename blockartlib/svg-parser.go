@@ -8,6 +8,7 @@ package blockartlib
 
 import (
 	"bytes"
+	"encoding/xml"
 	"errors"
 	"fmt"
 	"html/template"
@@ -53,7 +54,7 @@ type Components []Component
 
 // A Shape represents a shape
 type Shape interface {
-	Area() float64
+	Area() uint32
 	XMLString() string
 }
 
@@ -81,19 +82,19 @@ func (c CircleShape) radius() float64 {
 }
 
 // Area returns the area of a path element
-func (p PathShape) Area() float64 {
+func (p PathShape) Area() uint32 {
 	if p.fill != "transparent" {
-		return ShapeArea(p.components[0])
+		return uint32(math.Ceil(ShapeArea(p.components[0])))
 	}
-	return LineArea(p.components)
+	return uint32(math.Ceil(LineArea(p.components)))
 }
 
 // Area returns the area of a circle element
-func (c CircleShape) Area() float64 {
+func (c CircleShape) Area() uint32 {
 	if c.fill != "transparent" {
-		return math.Pi * math.Pow(c.r, 2)
+		return uint32(math.Ceil(math.Pi * math.Pow(c.r, 2)))
 	}
-	return 2 * math.Pi * c.r
+	return uint32(math.Ceil(2 * math.Pi * c.r))
 }
 
 var pathTemplate = "<svg><path d='{{.SVGString}}' fill='{{.Fill}}' stroke='{{.Stroke}}'/></svg>"
@@ -130,6 +131,44 @@ type SVGParser struct {
 func NewSVGParser() *SVGParser {
 	parser := SVGParser{}
 	return &parser
+}
+
+type SVGXML struct {
+	Path   PathXML   `xml:"path"`
+	Circle CircleXML `xml:"circle"`
+}
+type PathXML struct {
+	SVGString string `xml:"d,attr"`
+	Fill      string `xml:"fill,attr"`
+	Stroke    string `xml:"stroke,attr"`
+}
+
+type CircleXML struct {
+	Cx     string `xml:"cx,attr"`
+	Cy     string `xml:"cy,attr"`
+	R      string `xml:"r,attr"`
+	Fill   string `xml:"fill,attr"`
+	Stroke string `xml:"stroke,attr"`
+}
+
+func (p *SVGParser) ParseXMLString(XMLString string) (shape Shape, err error) {
+	var svg SVGXML
+	err = xml.Unmarshal([]byte(XMLString), &svg)
+	if err != nil {
+		return
+	}
+
+	nullPath := PathXML{}
+	nullCircle := CircleXML{}
+
+	if svg.Path != nullPath {
+		return p.Parse(PATH, svg.Path.SVGString, svg.Path.Fill, svg.Path.Stroke)
+	} else if svg.Circle != nullCircle {
+		SVGString := svg.Circle.Cx + ", " + svg.Circle.Cy + ", " + svg.Circle.R
+		return p.Parse(CIRCLE, SVGString, svg.Circle.Fill, svg.Circle.Stroke)
+	}
+	fmt.Println("bottomed out, should not be here.. ")
+	return
 }
 
 // Parse parses an SVG string and returns a list of components
@@ -377,6 +416,15 @@ func pointIsOutOfBounds(p, oo, xy Point2d) bool {
 	return true
 }
 
+// XMLStringsIntersect checks if two shapes intersect based on their xml representation.
+// Ignores errors because there should be NO ILLEGAL XML SHAPE STRINGS in our project!
+func XMLStringsIntersect(shapeString1, shapeString2 string) bool {
+	parser := NewSVGParser()
+	shape1, _ := parser.ParseXMLString(shapeString1)
+	shape2, _ := parser.ParseXMLString(shapeString1)
+	return Intersects(shape1, shape2)
+}
+
 // Intersects is true if the 'shape1' and 'shape2' intersect
 func Intersects(shape1, shape2 Shape) bool {
 
@@ -482,7 +530,7 @@ func circlesIntersect(c1, c2 CircleShape) bool {
 	}
 
 	minRad := argmin(c1.radius(), c2.radius()) + 1
-	fmt.Println(minRad)
+
 	if minRad == 1 { // c1 is smallest
 		if delta-c1.radius() <= c2.radius() {
 			if c2.fill != "transparent" {
@@ -624,7 +672,7 @@ func (p PathShape) String() string {
 	s += "  Components: " + compString + "\n"
 	s += "  Fill: " + p.fill + "\n"
 	s += "  Stroke: " + p.stroke + "\n"
-	s += "  Area: " + strconv.FormatFloat(p.Area(), 'f', -1, 64) + "\n"
+	s += "  Area: " + strconv.Itoa(int(p.Area())) + "\n"
 	s += "</Path>"
 	return s
 }
@@ -636,7 +684,7 @@ func (c CircleShape) String() string {
 	s += "  Radius: " + strconv.FormatFloat(c.r, 'f', -1, 64) + "\n"
 	s += "  Fill: " + c.fill + "\n"
 	s += "  Stroke: " + c.stroke + "\n"
-	s += "  Area: " + strconv.FormatFloat(c.Area(), 'f', -1, 64) + "\n"
+	s += "  Area: " + strconv.Itoa(int(c.Area())) + "\n"
 	s += "</Circle>"
 	return s
 }
