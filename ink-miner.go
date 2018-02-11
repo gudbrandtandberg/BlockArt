@@ -28,6 +28,8 @@ import (
 	"math/big"
 	"net"
 	"net/rpc"
+	"os"
+	"os/signal"
 	"strconv"
 	"strings"
 	"sync"
@@ -105,6 +107,7 @@ type MinerFromANode struct{}
 type IMiner struct {
 	serverClient *rpc.Client
 	localAddr    net.Addr
+	artAddr      string
 	neighbours   map[string]*rpc.Client
 
 	settings MinerNetSettings
@@ -206,6 +209,7 @@ func (m2m *MinerToMiner) HeartbeatNeighbours() (err error) {
 		//if we have good neighbours, return
 		fmt.Println("len neighbours, minminers, neighbours: ", len(ink.neighbours), ink.settings.MinNumMinerConnections, ink.neighbours)
 		if ((len(ink.neighbours) >= int(ink.settings.MinNumMinerConnections)) || (len(ink.neighbours) == 0)) {
+
 			return
 		}
 
@@ -300,7 +304,8 @@ type CanvasSettings struct {
 
 // Register makes RPC Register(localAddr, pubKey) call, and registers settings returned for canvas or returns error
 func (m2s *MinerToServer) Register() (err error) {
-	fmt.Println("localaddr: " , ink.localAddr)
+
+	fmt.Println("localaddr: ", ink.localAddr)
 	m := &MinerInfo{
 		Address: ink.localAddr,
 		Key:     ink.key.PublicKey,
@@ -461,6 +466,7 @@ func (ink IMiner) GetChildren(hash string) (children []Block) {
 	maplock.Unlock()
 	fmt.Println("unlocked3")
 	return
+
 }
 
 func (ink IMiner) getBlockChainHeads() (heads []Block) {
@@ -573,6 +579,7 @@ func main() {
 		serverClient: client,
 		key:          *priv,
 		localAddr:    l,
+		artAddr:      "", // <-- this is set in listenForArtNodes()
 		neighbours:   make(map[string]*rpc.Client),
 	}
 
@@ -580,6 +587,10 @@ func main() {
 	miner2server.Register()
 	err = miner2server.GetNodes()
 	err = ink.GetBlockChain()
+
+	go listenForArtNodes()
+	//defer dumpBlockchain()
+	//defer clearMinerKeyFile()
 
 	genesisBlock := Block{
 		PrevHash: "foobar",
@@ -613,8 +624,17 @@ func main() {
 	err = ink.Mine()
 	newBlockCH <- genesisBlock
 
-	// Listen incoming RPC calls from artnodes
-	listenForArtNodes()
+	c := make(chan os.Signal, 1) 
+	signal.Notify(c, os.Interrupt)
+	go func() {
+		for _ = range c {
+			dumpBlockchain()
+			clearMinerKeyFile()
+			os.Exit(0)
+		}
+	}()
+	
+
 }
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -631,8 +651,8 @@ func (m *RMiner) OpenCanvas(keyHash [16]byte, reply *CanvasSettings) error {
 		return errors.New("Miner: The key you are connecting with is not correct")
 	}
 
-	//*reply = ink.settings.CanvasSettings <-- should have queried the server first
-	*reply = CanvasSettings{1024, 1024} // <-- for now..
+	*reply = ink.settings.CanvasSettings // <-- should have queried the server first
+	//*reply = CanvasSettings{1024, 1024} // <-- for now..
 
 	return nil
 }
@@ -669,14 +689,22 @@ func listenForArtNodes() (err error) {
 	artServer := rpc.NewServer()
 	rminer := new(RMiner)
 	artServer.Register(rminer)
-	l, err := net.Listen("tcp", "127.0.0.1:0") // get address from global ink
+	l, err := net.Listen("tcp", ":0") // get address from global ink
+
+	artNodeRPCAddr := l.Addr().String()
+	ink.artAddr = artNodeRPCAddr
+	writeMinerAddrKeyToFile()
+
 	if err != nil {
 		fmt.Println(err)
 		return
 	}
 	fmt.Printf("Artserver started. Receiving on %s\n", ink.localAddr)
 	for {
-		conn, _ := l.Accept()
+		conn, err := l.Accept()
+		if err != nil {
+			return err
+		}
 		go artServer.ServeConn(conn)
 	}
 }
@@ -690,7 +718,6 @@ func decodeKey(hexStr string) (key *ecdsa.PrivateKey, err error) {
 	keyBytes, err := hex.DecodeString(hexStr)
 	if err != nil {
 		return key, err
-
 	}
 	return x509.ParseECPrivateKey(keyBytes)
 }
@@ -704,8 +731,21 @@ func encodeKey(key ecdsa.PrivateKey) (string, error) {
 	return keyString, nil
 }
 
+func writeMinerAddrKeyToFile() {
+	keyString, _ := encodeKey(ink.key)
+	filename := "./keys/" + ink.artAddr
+	fmt.Println("Writing file")
+	ioutil.WriteFile(filename, []byte(keyString), 0666)
+}
+
+func clearMinerKeyFile() {
+	fmt.Println("Deleting file")
+	filename := "./keys/" + ink.artAddr
+	os.Remove(filename)
+}
+
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////
-//								END OF METHODS, START OF VALIDATION										 	 //
+//								END OF ART2MINER, START OF VALIDATION										 	 //
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 func block2hash(block *Block) string {
@@ -781,7 +821,6 @@ func validateOpSigs(block *Block) bool {
 	return allTrue
 }
 
-// TODO
 //Returns true if there are -NOT- any intersections with any shapes already in blockchain which has not been deleted
 func validateIntersections(block *Block) bool {
 

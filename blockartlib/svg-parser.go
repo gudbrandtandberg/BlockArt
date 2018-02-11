@@ -184,6 +184,8 @@ func (p *SVGParser) Parse(shapeType ShapeType, svgString, fill, stroke string) (
 		return parseCircle(svgString, fill, stroke)
 	} else if shapeType == PATH {
 		return parseShape(svgString, fill, stroke)
+	} else if shapeType == STAR {
+		return parseShape(svgString, fill, stroke)
 	}
 
 	return nil, errors.New("Unknown ShapeType")
