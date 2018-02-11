@@ -582,19 +582,13 @@ func main() {
 		neighbours:   make(map[string]*rpc.Client),
 	}
 
-	// For now: write key to file
-	keyString, _ := encodeKey(*priv)
-	ioutil.WriteFile("./keys/key.txt", []byte(keyString), 0666)
-	// Listen incoming RPC calls from artnodes
-	go listenForArtNodes()
-
 	// Register with server
 	miner2server.Register()
 	err = miner2server.GetNodes()
 	err = ink.GetBlockChain()
 
+	// Listen incoming RPC calls from artnodes
 	go listenForArtNodes()
-	//defer clearMinerKeyFile()
 
 	genesisBlock := Block{
 		PrevHash: "foobar",
@@ -633,8 +627,6 @@ func main() {
 			os.Exit(0)
 		}
 	}()
-	// Listen incoming RPC calls from artnodes
-	//listenForArtNodes()
 }
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////
