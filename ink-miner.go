@@ -309,6 +309,8 @@ func (m2s *MinerToServer) Register() (err error) {
 	if err != nil {
 		return nil
 	}
+	log.Println(settings)
+
 	ink.settings = settings
 	return
 }
@@ -406,6 +408,7 @@ func (ink IMiner) Mine() (err error) {
 					// successfully found nonce
 					log.Printf("found nonce: %s", currentBlock.Nonce)
 					prevHash := block2hash(&currentBlock)
+					//log.Printf("block hash: %s", prevHash)
 					fmt.Println("locking")
 					maplock.Lock()
 					fmt.Println("locked")
@@ -414,6 +417,7 @@ func (ink IMiner) Mine() (err error) {
 					maplock.Unlock()
 					fmt.Println("unlocked")
 					foundBlockCH <- currentBlock // spit out the found block via channel
+					//log.Println("difficulty: ", ink.settings)
 //					newBlockCH <- currentBlock // spit out the found block via channel
 					currentBlock = Block{
 						PrevHash: prevHash,
@@ -570,12 +574,20 @@ func main() {
 		neighbours:   make(map[string]*rpc.Client),
 	}
 
+	// Register with server
+	miner2server.Register()
+	err = miner2server.GetNodes()
+	err = ink.GetBlockChain()
+
+	genesisBlock := Block{
+		PrevHash: "foobar",
+		Nonce: "1337",
+		MinedBy: ecdsa.PublicKey{},
+	}
+
 	// For now: write key to file
 	keyString, _ := encodeKey(*priv)
 	ioutil.WriteFile("./keys/key.txt", []byte(keyString), 0666)
-	// Listen incoming RPC calls from artnodes
-
-	listenForArtNodes()
 
 	go func() {
 		for {
@@ -589,7 +601,6 @@ func main() {
 	go func() {
 		for {
 			miner2server.HeartbeatServer()
-			fmt.Println(len(newBlockCH))
 			time.Sleep(time.Millisecond * 50)
 		}
 	}()
@@ -597,6 +608,10 @@ func main() {
 	checkError(err)
 
 	err = ink.Mine()
+	newBlockCH <- genesisBlock
+
+	// Listen incoming RPC calls from artnodes
+	listenForArtNodes()
 }
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -646,18 +661,13 @@ func listenForArtNodes() (err error) {
 	gob.Register(&elliptic.CurveParams{})
 	gob.Register(Operation{})
 
-	// Register with server
-	miner2server.Register()
-	err = miner2server.GetNodes()
-	err = ink.GetBlockChain()
-
 	fmt.Println("Blocks:", len(blocks))
 	checkError(err)
 
 	artServer := rpc.NewServer()
 	rminer := new(RMiner)
 	artServer.Register(rminer)
-	l, err := net.Listen("tcp", "127.0.0.1:9878") // get address from global ink
+	l, err := net.Listen("tcp", "127.0.0.1:0") // get address from global ink
 	if err != nil {
 		fmt.Println(err)
 		return
