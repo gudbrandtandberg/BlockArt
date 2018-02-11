@@ -5,8 +5,20 @@ library (blockartlib) to be used in project 1 of UBC CS 416 2017W2.
 
 package blockartlib
 
-import "crypto/ecdsa"
-import "fmt"
+import (
+	"crypto/ecdsa"
+	"crypto/elliptic"
+	"crypto/md5"
+	"crypto/rand"
+	"crypto/x509"
+	"encoding/gob"
+	"encoding/hex"
+	"errors"
+	"fmt"
+	"log"
+	"math/big"
+	"net/rpc"
+)
 
 // ShapeType represents a type of shape in the BlockArt system.
 type ShapeType int
@@ -130,15 +142,7 @@ func (e InvalidBlockHashError) Error() string {
 ////////////////////////////////////////////////////////////////////////////////////////////
 // <ART NODE 2 MINER IMPLEMENTATION>
 
-type ArtNodeToMinerInterface interface {
-	OpenCanvas()
-}
-
-type Art2Miner struct{}
-
-func (a *Art2Miner) OpenCanvas() {
-
-}
+var minerClient *rpc.Client
 
 // </ART NOTE 2 MINER IMPLEMENTATION>
 ////////////////////////////////////////////////////////////////////////////////////////////
@@ -169,12 +173,25 @@ type Canvas interface {
 // Can return the following errors:
 // - DisconnectedError
 func OpenCanvas(minerAddr string, privKey ecdsa.PrivateKey) (canvas Canvas, setting CanvasSettings, err error) {
-	// TODO
+	gob.Register(ecdsa.PrivateKey{})
+	gob.Register(&elliptic.CurveParams{})
+	gob.Register(Operation{})
 
-	x, y := uint32(1024), uint32(1024) // shoud come from call to miner
+	client, err := rpc.Dial("tcp", minerAddr)
+	if err != nil {
+		err = DisconnectedError(minerAddr)
+		return
+	}
+	minerClient = client
 
-	setting = CanvasSettings{x, y}
-	canvas = BACanvas{setting}
+	keyHash := hashPrivateKey(privKey)
+
+	err = minerClient.Call("RMiner.OpenCanvas", keyHash, &setting)
+	if err != nil {
+		return
+	}
+
+	canvas = BACanvas{setting, privKey}
 
 	return canvas, setting, nil
 }
@@ -186,6 +203,7 @@ func OpenCanvas(minerAddr string, privKey ecdsa.PrivateKey) (canvas Canvas, sett
 // The BACanvas object implements the Canvas interface.
 type BACanvas struct {
 	settings CanvasSettings
+	privKey  ecdsa.PrivateKey
 }
 
 // AddShape adds a new shape to the canvas.
@@ -223,6 +241,20 @@ func (c BACanvas) AddShape(validateNum uint8, shapeType ShapeType, shapeSvgStrin
 		}
 	}
 
+	// local checks done, send op to miner
+	var op Operation
+	op.Delete = false
+	op.Owner = c.privKey.PublicKey
+	op.SVG = shape.XMLString()
+	op.SVGHash = signShapeString(op.SVG, &c.privKey)
+	shapeHash = hex.EncodeToString(op.SVGHash.Hash)
+
+	err = minerClient.Call("RMiner.RecordAddOp", op, nil)
+	if err != nil {
+		return
+	}
+
+	fmt.Println("everything went well")
 	return
 }
 
@@ -246,6 +278,21 @@ func (c BACanvas) GetInk() (inkRemaining uint32, err error) {
 // - DisconnectedError
 // - ShapeOwnerError
 func (c BACanvas) DeleteShape(validateNum uint8, shapeHash string) (inkRemaining uint32, err error) {
+
+	// local checks done, send op to miner
+	var op Operation
+	op.Delete = true
+	op.Owner = c.privKey.PublicKey
+	op.SVG = shapeHash
+	op.SVGHash = signShapeString(op.SVG, &c.privKey)
+	op.ValNum = validateNum
+
+	err = minerClient.Call("RMiner.RecordDeleteOp", op, nil)
+	if err != nil {
+		return
+	}
+	fmt.Println("everything went well")
+
 	return
 }
 
@@ -279,4 +326,48 @@ func (c BACanvas) CloseCanvas() (inkRemaining uint32, err error) {
 }
 
 // </CANVAS IMPLEMENTATION>
+////////////////////////////////////////////////////////////////////////////////////////////
+
+////////////////////////////////////////////////////////////////////////////////////////////
+// <EXTRA STUFF>
+
+func signShapeString(shapeString string, key *ecdsa.PrivateKey) SVGHash {
+
+	shapeHash := md5.Sum([]byte(shapeString))
+
+	r, s, err := ecdsa.Sign(rand.Reader, key, shapeHash[:])
+	if err != nil {
+		log.Fatal(errors.New("Can't sign shape"))
+	}
+
+	return SVGHash{shapeHash[:], r, s}
+}
+
+func hashPrivateKey(key ecdsa.PrivateKey) [16]byte {
+	keyBytes, _ := x509.MarshalECPrivateKey(&key)
+	return md5.Sum(keyBytes)
+}
+
+func encodeKey(key ecdsa.PrivateKey) (string, error) {
+	keyBytes, err := x509.MarshalECPrivateKey(&key)
+	if err != nil {
+		return "", err
+	}
+	keyString := hex.EncodeToString(keyBytes)
+	return keyString, nil
+}
+
+type Operation struct {
+	Delete  bool
+	SVG     string
+	SVGHash SVGHash
+	Owner   ecdsa.PublicKey
+	ValNum  uint8
+}
+type SVGHash struct {
+	Hash []byte
+	R, S *big.Int
+}
+
+// </EXTRA STUFF>
 ////////////////////////////////////////////////////////////////////////////////////////////

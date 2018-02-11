@@ -10,6 +10,7 @@
 package main
 
 import (
+	//"./blockartlib"
 	"bytes"
 	"crypto/ecdsa"
 	"crypto/elliptic"
@@ -24,6 +25,7 @@ import (
 	"fmt"
 	"io/ioutil"
 	"log"
+	"math"
 	"math/big"
 	"net"
 	"net/rpc"
@@ -105,10 +107,6 @@ type IMiner struct {
 	neighbours   map[string]*rpc.Client
 
 	settings MinerNetSettings
-
-	tails        []*Block
-	currentBlock *Block
-
 	key ecdsa.PrivateKey
 }
 
@@ -119,6 +117,7 @@ type Operation struct {
 	Owner   ecdsa.PublicKey
 	ValNum  uint8
 }
+
 type SVGHash struct {
 	Hash []byte
 	R, S *big.Int
@@ -147,16 +146,11 @@ func (e InvalidBlockHashError) Error() string {
 }
 
 func (art MinerFromANode) GetChildren(hash string, childrenHashes *[]string) (err error) {
-	for _, block := range ink.GetChildren(hash) {
-		*childrenHashes = append(*childrenHashes, block2hash(&block))
-	}
-	return // TODO: ERROR
+
 }
 
 func (m2m *MinerToMiner) FloodToPeers(block *Block) (err error) {
 	fmt.Println("Sent", block.Nonce, block2hash(block))
-	fmt.Println(block.PrevHash, block.Nonce, block.Ops, block.MinedBy)
-	m2m.HeartbeatNeighbours()
 
 	for _, neighbour := range ink.neighbours {
 		var reply bool
@@ -203,24 +197,17 @@ func (m2m *MinerToMiner) HeartbeatNeighbours() (err error) {
 
 func (m2m *MinerToMiner) ReceiveBlock(block *Block, reply *bool) (err error) {
 	fmt.Println("Received", block.Nonce, block2hash(block))
-	fmt.Println(block.PrevHash, block.Nonce, block.Ops, block.MinedBy)
 	difficulty := ink.settings.PoWDifficultyNoOpBlock
 	if len(block.Ops) != 0 {
 		difficulty = ink.settings.PoWDifficultyOpBlock
 	}
 	if validateBlock(block, difficulty) {
-		fmt.Println("trying to validate", ink.getBlockChainHeads())
-		for _, head := range ink.getBlockChainHeads() {
-			fmt.Println("checking", head.PrevHash, block.PrevHash)
-			if block2hash(&head) == block.PrevHash {
 				fmt.Println("validated")
 				newBlockCH <- *block
 			} else {
 				log.Println("tsk tsk Received block does not append to a head")
 			}
 		}
-	} else {
-		fmt.Println("Not valid", block.PrevHash, block2hash(block))
 	}
 	return
 }
@@ -324,7 +311,7 @@ func (ink IMiner) Mine() (err error) {
 		for {
 			select {
 			case b := <-newBlockCH:
-				blocks[block2hash(&b)] = b
+
 				currentBlock = Block{
 					PrevHash: block2hash(&b),
 					MinedBy:  ink.key.PublicKey,
@@ -342,23 +329,12 @@ func (ink IMiner) Mine() (err error) {
 
 			default:
 				i++
-				if i%50000 == 0 {
-					fmt.Println("mining:", block2hash(&currentBlock), currentBlock.PrevHash)
-				}
+
 				currentBlock.Nonce = strconv.FormatUint(i, 10)
 				if validateBlock(&currentBlock, difficulty) {
 					// successfully found nonce
 					log.Printf("found nonce: %s", currentBlock.Nonce)
-					prevHash := block2hash(&currentBlock)
-					blocks[prevHash] = currentBlock
-					foundBlockCH <- currentBlock // spit out the found block via channel
-					//					newBlockCH <- currentBlock // spit out the found block via channel
-					currentBlock = Block{
-						PrevHash: prevHash,
-						MinedBy:  ink.key.PublicKey,
-						Ops:      opQueue,
-					}
-					opQueue = make([]Operation, 0)
+
 					i = 0
 				}
 			}
@@ -393,6 +369,7 @@ func (ink IMiner) getBlockChainHeads() (heads []Block) {
 		heads = append(heads, v)
 	}
 	return
+
 }
 
 var ink IMiner
@@ -404,6 +381,9 @@ var blocks map[string]Block
 var newOpsCH (chan Operation)
 var newBlockCH (chan Block)
 var foundBlockCH (chan Block)
+
+
+var genesisNode BlockNode
 
 func tmp() net.Addr {
 	server := rpc.NewServer()
@@ -427,7 +407,7 @@ func main() {
 	gob.Register(&MinerInfo{})
 
 	blocks = make(map[string]Block)
-
+  
 	newOpsCH = make(chan Operation)
 	newBlockCH = make(chan Block)
 	foundBlockCH = make(chan Block)
@@ -452,46 +432,8 @@ func main() {
 	keyString, _ := encodeKey(*priv)
 	ioutil.WriteFile("./keys/key.txt", []byte(keyString), 0666)
 	// Listen incoming RPC calls from artnodes
-	go listenForArtNodes()
 
-	// Register with server
-	miner2server.Register()
-	err = miner2server.GetNodes()
-	checkError(err)
-
-	genesisBlock := Block{
-		PrevHash: ink.settings.GenesisBlockHash,
-		MinedBy:  priv.PublicKey,
-	}
-
-	go func() {
-		for {
-			minedBlock := <-foundBlockCH
-			miner2miner.FloodToPeers(&minedBlock)
-		}
-	}()
-	ink.currentBlock = &genesisBlock
-
-	fmt.Println(err, ink.neighbours)
-
-	// Heartbeat server
-	go func() {
-		for {
-			miner2server.HeartbeatServer()
-			time.Sleep(time.Millisecond * 50)
-		}
-	}()
-	miner2miner.HeartbeatNeighbours()
-	checkError(err)
-
-	err = ink.Mine()
-	newBlockCH <- genesisBlock
-
-	for {
-		time.Sleep(time.Second * 2)
-	}
-
-	//genesisNode.Children = append(genesisNode.Children, newNode)
+	listenForArtNodes()
 }
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -517,11 +459,21 @@ func (m *RMiner) OpenCanvas(keyHash [16]byte, reply *CanvasSettings) error {
 func (m *RMiner) RecordDeleteOp(op Operation, reply *string) error {
 	fmt.Println("Will delete:")
 	fmt.Println(op.SVG)
+
+	if !ecdsa.Verify(&ink.key.PublicKey, op.SVGHash.Hash, op.SVGHash.R, op.SVGHash.S) {
+		return errors.New("Invalid signature")
+	}
+
 	return nil
 }
 
 func (m *RMiner) RecordAddOp(op Operation, reply *string) error {
 	fmt.Println("Will add this shape to my current block:")
+
+	if !ecdsa.Verify(&ink.key.PublicKey, op.SVGHash.Hash, op.SVGHash.R, op.SVGHash.S) {
+		return errors.New("Invalid signature")
+	}
+
 	fmt.Println(op.SVG)
 	return nil
 }
@@ -530,6 +482,11 @@ func listenForArtNodes() {
 	gob.Register(ecdsa.PrivateKey{})
 	gob.Register(&elliptic.CurveParams{})
 	gob.Register(Operation{})
+
+	// Register with server
+	miner2server.Register()
+	err = miner2server.GetNodes()
+	checkError(err)
 
 	artServer := rpc.NewServer()
 	rminer := new(RMiner)
@@ -550,10 +507,21 @@ func hashPrivateKey(key ecdsa.PrivateKey) [16]byte {
 	keyBytes, _ := x509.MarshalECPrivateKey(&key)
 	return md5.Sum(keyBytes)
 }
+
 func decodeKey(hexStr string) (key *ecdsa.PrivateKey, err error) {
 	keyBytes, err := hex.DecodeString(hexStr)
 	if err != nil {
 		return key, err
+
+	}
+	return x509.ParseECPrivateKey(keyBytes)
+}
+func encodeKey(key ecdsa.PrivateKey) (string, error) {
+	keyBytes, err := x509.MarshalECPrivateKey(&key)
+	if err != nil {
+		return "", err
+	}
+
 	}
 	return x509.ParseECPrivateKey(keyBytes)
 }
@@ -566,7 +534,6 @@ func encodeKey(key ecdsa.PrivateKey) (string, error) {
 	return keyString, nil
 }
 
-///////////////////////////////////////////////////////////////////////////////////////////////////////////////
 //								END OF METHODS, START OF VALIDATION										 	 //
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
@@ -590,6 +557,7 @@ func block2string(block *Block) string {
 		Check that the nonce for the block is valid: PoW is correct and has the right difficulty.
 		Check that each operation in the block has a valid signature (this signature should be generated using the private key and the operation).
 		Check that the previous block hash points to a legal, previously generated, block.
+
 */
 func validateBlock(block *Block, difficulty uint8) bool {
 	validNonce := validateNonce(block, difficulty)

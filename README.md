@@ -5,19 +5,28 @@ This document explains how we have implemented the BlockArt project, which is sp
 
 ## Overview
 
-The goal of the project is to implement a platform for a blockchain-based collaborative __art-project__.
-The art project consists of a single global canvas, to which all participants can issue commands.
-The main commands a user can issue to a canvas are __draw__ and __delete__. In addition, a user 
+The goal of the project is to implement a platform for a blockchain-based, collaborative __art-project__.
+The art project consists of a single global canvas, unto which all participants can issue commands.
+The main commands a user can issue are __draw__ and __delete__. In addition, a user 
 can perform a number of queries to the canvas, including ink-level, blockchain-state and more. 
 
 For a user to take part in the art-project, it must be connected to a single __miner__ in the 
 __ink-mining__ network. A user connects to a miner using the miner's private key and the miner's network address. 
 Miners are responsible for issuing commands on behalf of connected clients, as well as disseminating and validating
-all operations on the distributed blockchain. 
+operations on a distributed blockchain. 
 
-<img src="html/img/Network.png" width="300" />
+A user can either connect to the system through a web browser, by connecting to the webserver, implemented in ```webserver.go```, or through a Go script that imports the blockartlib library.
+
+The mining network is maintained by the central server (```server.go```), which takes care of miner registration and handles requests from miners who need more peers. The miners have to send regular heartbeats to the central server, which keeps a list of live miners. 
+
+<img src="html/img/Network.png" width="300" style="margin-left: 100px;"/>
 
 ## BlockArtLib
+
+The ```blockartlib``` library defines the API for a client (ArtNode) to connect to a miner. 
+The ArtNode&mdash;Miner connection is implemented using remote procedure calls (RPC) over a HTTP/TCP connection.
+
+
 
 ### Graphics
 
