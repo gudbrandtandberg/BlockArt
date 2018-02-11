@@ -1,28 +1,29 @@
 /*
 
-An ink miner mines ink and disseminates blocks
+	An ink miner mines ink and disseminates blocks
 
-Usage:
-go run ink-miner.go [server ip:port] [pubKey] [privKey]
+	Usage:
+	go run ink-miner.go [server ip:port] [pubKey] [privKey]
 
 */
 
 package main
 
 import (
-	//"./blockartlib"
 	"bytes"
 	"crypto/ecdsa"
 	"crypto/elliptic"
 	"crypto/md5"
 	"crypto/rand"
+	"crypto/x509"
 	"encoding/gob"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"flag"
 	"fmt"
+	"io/ioutil"
 	"log"
-	"math"
 	"math/big"
 	"net"
 	"net/rpc"
@@ -44,19 +45,19 @@ type MinerToMinerInterface interface {
 
 ////// TCP RPC calls to make against server
 /*
-settings, err ← Register(address, publicKey)
-	Registers a new miner witMinerToMinerh an address for other miner to use to connect to it (returned in GetNodes call below)
-		and a public-key for this miner. Returns error, or if error is not set, then setting for this canvas instance.
-	Returns AddressAlreadyRegisteredError if the server has already registered this address.
-	Returns KeyAlreadyRegisteredError if the server already has a registration record for publicKey.
-addrSet,err ← GetNodes(publicKey)
-	Returns addresses for a subset of miners in the system. Returns UnknownKeyError if the server does not know
-		a miner with this publicKey.
-err ← HeartBeat(publicKey)
-	The server also listens for heartbeats from known miners. A miner must send a heartbeat to the server
-		every HeartBeat milliseconds (specified in settings from server) after calling Register, otherwise the server
-		will stop returning this miner's address/key to other miners.
-	Returns UnknownKeyError if the server does not know a miner with this publicKey.
+	settings, err ← Register(address, publicKey)
+		Registers a new miner witMinerToMinerh an address for other miner to use to connect to it (returned in GetNodes call below)
+			and a public-key for this miner. Returns error, or if error is not set, then setting for this canvas instance.
+		Returns AddressAlreadyRegisteredError if the server has already registered this address.
+		Returns KeyAlreadyRegisteredError if the server already has a registration record for publicKey.
+	addrSet,err ← GetNodes(publicKey)
+		Returns addresses for a subset of miners in the system. Returns UnknownKeyError if the server does not know
+			a miner with this publicKey.
+	err ← HeartBeat(publicKey)
+		The server also listens for heartbeats from known miners. A miner must send a heartbeat to the server
+			every HeartBeat milliseconds (specified in settings from server) after calling Register, otherwise the server
+			will stop returning this miner's address/key to other miners.
+		Returns UnknownKeyError if the server does not know a miner with this publicKey.
 */
 type MinerToServerInterface interface {
 	// makes RPC Register(localAddr, pubKey) call, and registers settings returned for canvas or returns error
@@ -79,10 +80,12 @@ type IMinerInterface interface {
 
 	// Just a disconnected error? other errors will be handled by methods called within mine
 	GetLongestChain() (Block, error)
+
 	Mine() error
 }
 
-type BlockInterface interface {}
+type BlockInterface interface{}
+
 // methods for validation, blockchain itself
 type BlockChainInterface interface {
 	ValidateBlock(BlockInterface) error
@@ -114,16 +117,11 @@ type Operation struct {
 	SVG     string
 	SVGHash SVGHash
 	Owner   ecdsa.PublicKey
+	ValNum  uint8
 }
-
 type SVGHash struct {
 	Hash []byte
 	R, S *big.Int
-}
-
-type BlockNode struct {
-	Block    Block
-	Children []BlockNode
 }
 
 type Block struct {
@@ -149,24 +147,16 @@ func (e InvalidBlockHashError) Error() string {
 }
 
 func (art MinerFromANode) GetChildren(hash string, childrenHashes *[]string) (err error) {
-	nodesToCheck := make([]BlockNode, 0, math.MaxUint32)
-	nodesToCheck = append(nodesToCheck, genesisNode)
-	for len(nodesToCheck) > 0 {
-		var node BlockNode = nodesToCheck[0]
-		if block2hash(&node.Block) == hash {
-			*childrenHashes = make([]string, 0, len(node.Children))
-			for _, child := range node.Children {
-				*childrenHashes = append(*childrenHashes, block2hash(&child.Block))
-			}
-			return
-		}
-		nodesToCheck = append(nodesToCheck, node.Children...)
+	for _, block := range ink.GetChildren(hash) {
+		*childrenHashes = append(*childrenHashes, block2hash(&block))
 	}
-	return InvalidBlockHashError(hash)
+	return // TODO: ERROR
 }
 
 func (m2m *MinerToMiner) FloodToPeers(block *Block) (err error) {
 	fmt.Println("Sent", block.Nonce, block2hash(block))
+	fmt.Println(block.PrevHash, block.Nonce, block.Ops, block.MinedBy)
+	m2m.HeartbeatNeighbours()
 
 	for _, neighbour := range ink.neighbours {
 		var reply bool
@@ -213,21 +203,24 @@ func (m2m *MinerToMiner) HeartbeatNeighbours() (err error) {
 
 func (m2m *MinerToMiner) ReceiveBlock(block *Block, reply *bool) (err error) {
 	fmt.Println("Received", block.Nonce, block2hash(block))
-
+	fmt.Println(block.PrevHash, block.Nonce, block.Ops, block.MinedBy)
 	difficulty := ink.settings.PoWDifficultyNoOpBlock
 	if len(block.Ops) != 0 {
 		difficulty = ink.settings.PoWDifficultyOpBlock
 	}
 	if validateBlock(block, difficulty) {
-		fmt.Println("trying to validate")
+		fmt.Println("trying to validate", ink.getBlockChainHeads())
 		for _, head := range ink.getBlockChainHeads() {
-			if block2hash(&head.Block) == block.PrevHash {
+			fmt.Println("checking", head.PrevHash, block.PrevHash)
+			if block2hash(&head) == block.PrevHash {
 				fmt.Println("validated")
 				newBlockCH <- *block
 			} else {
 				log.Println("tsk tsk Received block does not append to a head")
 			}
 		}
+	} else {
+		fmt.Println("Not valid", block.PrevHash, block2hash(block))
 	}
 	return
 }
@@ -270,7 +263,7 @@ type CanvasSettings struct {
 	CanvasYMax uint32 `json:"canvas-y-max"`
 }
 
-// makes RPC Register(localAddr, pubKey) call, and registers settings returned for canvas or returns error
+// Register makes RPC Register(localAddr, pubKey) call, and registers settings returned for canvas or returns error
 func (m2s *MinerToServer) Register() (err error) {
 	fmt.Println(ink.localAddr)
 	m := &MinerInfo{
@@ -286,7 +279,7 @@ func (m2s *MinerToServer) Register() (err error) {
 	return
 }
 
-// Makes RPC GetNodes(pubKey) call, makes a call to ConnectToNeighbour for each returned addr, can return errors
+// GetNodes makes RPC GetNodes(pubKey) call, makes a call to ConnectToNeighbour for each returned addr, can return errors
 func (m2s *MinerToServer) GetNodes() (err error) {
 	minerAddresses := make([]net.Addr, 0)
 	err = ink.serverClient.Call("RServer.GetNodes", ink.key.PublicKey, &minerAddresses)
@@ -305,7 +298,7 @@ func (m2s *MinerToServer) GetNodes() (err error) {
 	return
 }
 
-// makes RPC HearBeat(pubKey) call, changes connected state accordingly which will return different errors for art node requests
+// HeartbeatServer makes RPC HearBeat(pubKey) call, changes connected state accordingly which will return different errors for art node requests
 func (m2s *MinerToServer) HeartbeatServer() (err error) {
 	// Create a struct, that mimics all methods provided by interface.
 	// It is not compulsory, we are doing it here, just to simulate a traditional method call.
@@ -327,17 +320,11 @@ func (ink IMiner) Mine() (err error) {
 
 	var currentBlock Block
 
-	/*
-	   type Operation struct {
-	   	Svg string
-	   	SvgHash SVGHash
-	   	Owner ecdsa.PublicKey
-	   }
-	*/
 	go func() {
 		for {
 			select {
 			case b := <-newBlockCH:
+				blocks[block2hash(&b)] = b
 				currentBlock = Block{
 					PrevHash: block2hash(&b),
 					MinedBy:  ink.key.PublicKey,
@@ -355,12 +342,23 @@ func (ink IMiner) Mine() (err error) {
 
 			default:
 				i++
+				if i%50000 == 0 {
+					fmt.Println("mining:", block2hash(&currentBlock), currentBlock.PrevHash)
+				}
 				currentBlock.Nonce = strconv.FormatUint(i, 10)
 				if validateBlock(&currentBlock, difficulty) {
 					// successfully found nonce
 					log.Printf("found nonce: %s", currentBlock.Nonce)
+					prevHash := block2hash(&currentBlock)
+					blocks[prevHash] = currentBlock
 					foundBlockCH <- currentBlock // spit out the found block via channel
-					currentBlock = Block{PrevHash: block2hash(&currentBlock), MinedBy: ink.key.PublicKey}
+					//					newBlockCH <- currentBlock // spit out the found block via channel
+					currentBlock = Block{
+						PrevHash: prevHash,
+						MinedBy:  ink.key.PublicKey,
+						Ops:      opQueue,
+					}
+					opQueue = make([]Operation, 0)
 					i = 0
 				}
 			}
@@ -369,18 +367,30 @@ func (ink IMiner) Mine() (err error) {
 	return nil
 }
 
-func (ink IMiner) getBlockChainHeads() (heads []BlockNode) {
-	heads = make([]BlockNode, 0)
-	nodesToCheck := make([]BlockNode, 0)
-	nodesToCheck = append(nodesToCheck, genesisNode)
-	for len(nodesToCheck) > 0 {
-		var node BlockNode = nodesToCheck[0]
-		nodesToCheck = nodesToCheck[1:]
-		if len(node.Children) == 0 {
-			heads = append(heads, node)
-		} else {
-			nodesToCheck = append(nodesToCheck, node.Children...)
+func (ink IMiner) GetGenesisBlock() (genesis Block) {
+	return blocks[ink.settings.GenesisBlockHash]
+}
+
+func (ink IMiner) GetChildren(hash string) (children []Block) {
+	children = make([]Block, 0)
+	for _, block := range blocks {
+		if block.PrevHash == hash {
+			children = append(children, block)
 		}
+	}
+	return
+}
+
+func (ink IMiner) getBlockChainHeads() (heads []Block) {
+	possibilities := make(map[string]Block)
+	for k, v := range blocks {
+		possibilities[k] = v
+	}
+	for _, block := range blocks {
+		delete(possibilities, block.PrevHash)
+	}
+	for _, v := range possibilities {
+		heads = append(heads, v)
 	}
 	return
 }
@@ -388,14 +398,12 @@ func (ink IMiner) getBlockChainHeads() (heads []BlockNode) {
 var ink IMiner
 var miner2server MinerToServer
 var miner2miner MinerToMiner
+
 var blocks map[string]Block
-var bufferedOps []Operation
 
 var newOpsCH (chan Operation)
 var newBlockCH (chan Block)
 var foundBlockCH (chan Block)
-
-var genesisNode BlockNode
 
 func tmp() net.Addr {
 	server := rpc.NewServer()
@@ -418,6 +426,8 @@ func main() {
 	gob.Register(&elliptic.CurveParams{})
 	gob.Register(&MinerInfo{})
 
+	blocks = make(map[string]Block)
+
 	newOpsCH = make(chan Operation)
 	newBlockCH = make(chan Block)
 	foundBlockCH = make(chan Block)
@@ -431,13 +441,18 @@ func main() {
 	client, err := rpc.Dial("tcp", *ipPort)
 
 	l := tmp()
-	bufferedOps = make([]Operation, 0, math.MaxUint16)
 	ink = IMiner{
 		serverClient: client,
 		key:          *priv,
 		localAddr:    l,
 		neighbours:   make(map[string]*rpc.Client),
 	}
+
+	// For now: write key to file
+	keyString, _ := encodeKey(*priv)
+	ioutil.WriteFile("./keys/key.txt", []byte(keyString), 0666)
+	// Listen incoming RPC calls from artnodes
+	go listenForArtNodes()
 
 	// Register with server
 	miner2server.Register()
@@ -480,6 +495,78 @@ func main() {
 }
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////
+//								END OF ?, START OF ART2MINER IMLEMENTATION											 //
+///////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+type RMiner int
+
+func (m *RMiner) OpenCanvas(keyHash [16]byte, reply *CanvasSettings) error {
+
+	fmt.Println("New ArtNode connecting")
+
+	if hashPrivateKey(ink.key) != keyHash {
+		return errors.New("Miner: The key you are connecting with is not correct")
+	}
+
+	//*reply = ink.settings.CanvasSettings <-- should have queried the server first
+	*reply = CanvasSettings{1024, 1024} // <-- for now..
+
+	return nil
+}
+
+func (m *RMiner) RecordDeleteOp(op Operation, reply *string) error {
+	fmt.Println("Will delete:")
+	fmt.Println(op.SVG)
+	return nil
+}
+
+func (m *RMiner) RecordAddOp(op Operation, reply *string) error {
+	fmt.Println("Will add this shape to my current block:")
+	fmt.Println(op.SVG)
+	return nil
+}
+
+func listenForArtNodes() {
+	gob.Register(ecdsa.PrivateKey{})
+	gob.Register(&elliptic.CurveParams{})
+	gob.Register(Operation{})
+
+	artServer := rpc.NewServer()
+	rminer := new(RMiner)
+	artServer.Register(rminer)
+	l, err := net.Listen("tcp", "127.0.0.1:9878") // get address from global ink
+	if err != nil {
+		fmt.Println(err)
+		return
+	}
+	fmt.Printf("Artserver started. Receiving on %s\n", ink.localAddr)
+	for {
+		conn, _ := l.Accept()
+		go artServer.ServeConn(conn)
+	}
+}
+
+func hashPrivateKey(key ecdsa.PrivateKey) [16]byte {
+	keyBytes, _ := x509.MarshalECPrivateKey(&key)
+	return md5.Sum(keyBytes)
+}
+func decodeKey(hexStr string) (key *ecdsa.PrivateKey, err error) {
+	keyBytes, err := hex.DecodeString(hexStr)
+	if err != nil {
+		return key, err
+	}
+	return x509.ParseECPrivateKey(keyBytes)
+}
+func encodeKey(key ecdsa.PrivateKey) (string, error) {
+	keyBytes, err := x509.MarshalECPrivateKey(&key)
+	if err != nil {
+		return "", err
+	}
+	keyString := hex.EncodeToString(keyBytes)
+	return keyString, nil
+}
+
+///////////////////////////////////////////////////////////////////////////////////////////////////////////////
 //								END OF METHODS, START OF VALIDATION										 	 //
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
@@ -499,10 +586,10 @@ func block2string(block *Block) string {
 }
 
 /*
-Block validations:
-	Check that the nonce for the block is valid: PoW is correct and has the right difficulty.
-	Check that each operation in the block has a valid signature (this signature should be generated using the private key and the operation).
-	Check that the previous block hash points to a legal, previously generated, block.
+	Block validations:
+		Check that the nonce for the block is valid: PoW is correct and has the right difficulty.
+		Check that each operation in the block has a valid signature (this signature should be generated using the private key and the operation).
+		Check that the previous block hash points to a legal, previously generated, block.
 */
 func validateBlock(block *Block, difficulty uint8) bool {
 	validNonce := validateNonce(block, difficulty)
@@ -524,11 +611,11 @@ func validatePrevHash(block *Block) bool {
 }
 
 /*
-Operation validations:
-	Check that each operation has sufficient ink associated with the public key that generated the operation.
-	Check that each operation does not violate the shape intersection policy described above.
-	Check that the operation with an identical signature has not been previously added to the blockchain (prevents operation replay attacks).
-	Check that an operation that deletes a shape refers to a shape that exists and which has not been previously deleted.
+	Operation validations:
+		Check that each operation has sufficient ink associated with the public key that generated the operation.
+		Check that each operation does not violate the shape intersection policy described above.
+		Check that the operation with an identical signature has not been previously added to the blockchain (prevents operation replay attacks).
+		Check that an operation that deletes a shape refers to a shape that exists and which has not been previously deleted.
 */
 func validateOps(block *Block) bool {
 	opSignatures := validateOpSigs(block)
@@ -550,7 +637,7 @@ func validateOpSigs(block *Block) bool {
 	return allTrue
 }
 
-// TODO 
+// TODO
 //Returns true if there are -NOT- any intersections with any shapes already in blockchain
 func validateIntersections(block *Block) bool {
 	return true
@@ -615,7 +702,6 @@ iLoop:
 
 }
 
-
 //TODO
 //Returns true if shape is in blockchain and not previously deleted and is a delete
 func validateDelete(block *Block) bool {
@@ -627,7 +713,7 @@ func validateDelete(block *Block) bool {
 			//if it's a delete, handle it, if it's not a delete ignore
 			shapeHash := op.SVG
 			currBlock := tipOfChain
-			BlockSelectionLoop:
+		BlockSelectionLoop:
 			for currBlock.PrevHash != ink.settings.GenesisBlockHash {
 				for _, o := range currBlock.Ops {
 					if hex.EncodeToString(o.SVGHash.Hash) == shapeHash {
@@ -643,22 +729,6 @@ func validateDelete(block *Block) bool {
 	}
 	return allPossible
 }
-
-/*
-type Operation struct {
-	Delete  bool
-	SVG     string
-	SVGHash SVGHash
-	Owner   ecdsa.PublicKey
-}
-
-type SVGHash struct {
-	Hash []byte
-	R, S *big.Int
-}
-
-
-*/
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////
 //								END OF MINING, START OF UTILITIES											 //
