@@ -10,7 +10,6 @@
 package main
 
 import (
-	"./blockartlib"
 	"bytes"
 	"crypto/ecdsa"
 	"crypto/elliptic"
@@ -34,6 +33,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"./blockartlib"
 )
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -211,7 +212,7 @@ func (m2m *MinerToMiner) HeartbeatNeighbours() (err error) {
 		time.Sleep(2 * time.Second)
 		//if we have good neighbours, return
 		fmt.Println("len neighbours, minminers, neighbours: ", len(ink.neighbours), ink.settings.MinNumMinerConnections, ink.neighbours)
-		if ((len(ink.neighbours) >= int(ink.settings.MinNumMinerConnections)) || (len(ink.neighbours) == 0)) {
+		if (len(ink.neighbours) >= int(ink.settings.MinNumMinerConnections)) || (len(ink.neighbours) == 0) {
 			return
 		}
 		//else we get more neighbours
@@ -264,7 +265,6 @@ func (m2m *MinerToMiner) ReceiveBlock(block *Block, reply *bool) (err error) {
 	}
 	return
 }
-
 
 type MinerInfo struct {
 	Address net.Addr
@@ -624,7 +624,7 @@ func main() {
 	err = ink.Mine()
 	newBlockCH <- genesisBlock
 
-	c := make(chan os.Signal, 1) 
+	c := make(chan os.Signal, 1)
 	signal.Notify(c, os.Interrupt)
 	go func() {
 		for _ = range c {
@@ -744,6 +744,7 @@ func clearMinerKeyFile() {
 	filename := "./keys/" + ink.artAddr
 	os.Remove(filename)
 }
+
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////
 //								END OF ART2MINER, START OF VALIDATION										 	 //
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -822,7 +823,7 @@ func validateOpSigs(block *Block) bool {
 // TODO
 //Returns true if there are -NOT- any intersections with any shapes already in blockchain
 func validateIntersections(block *Block) bool {
-	
+
 	noIntersections := true
 	var toCheck []Operation
 	var theBlocks []Block
@@ -944,7 +945,6 @@ func checkError(err error) {
 		fmt.Println("ERROR:", err)
 	}
 }
-
 
 //writes out block's nonce and prevhash and level
 func dumpBlockchain() {
