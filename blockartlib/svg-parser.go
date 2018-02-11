@@ -416,6 +416,15 @@ func pointIsOutOfBounds(p, oo, xy Point2d) bool {
 	return true
 }
 
+// XMLStringsIntersect checks if two shapes intersect based on their xml representation.
+// Ignores errors because there should be NO ILLEGAL XML SHAPE STRINGS in our project!
+func XMLStringsIntersect(shapeString1, shapeString2 string) bool {
+	parser := NewSVGParser()
+	shape1, _ := parser.ParseXMLString(shapeString1)
+	shape2, _ := parser.ParseXMLString(shapeString1)
+	return Intersects(shape1, shape2)
+}
+
 // Intersects is true if the 'shape1' and 'shape2' intersect
 func Intersects(shape1, shape2 Shape) bool {
 
