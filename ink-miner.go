@@ -740,10 +740,12 @@ func validateBlock(block *Block, difficulty uint8) bool {
 	return (validNonce && validOps && validPrevHash)
 }
 
+// Returns true if nonce and block hash to have correct difficulty, false otherwise
 func validateNonce(block *Block, difficulty uint8) bool {
 	return strings.HasSuffix(block2hash(block), strings.Repeat("0", int(difficulty)))
 }
 
+// Returns true is block referenced by PrevHash is part of blockchain
 func validatePrevHash(block *Block) bool {
 	_, ok := blocks[block.PrevHash]
 	if ok {
@@ -780,33 +782,14 @@ func validateOpSigs(block *Block) bool {
 }
 
 // TODO
-//Returns true if there are -NOT- any intersections with any shapes already in blockchain
+//Returns true if there are -NOT- any intersections with any shapes already in blockchain which has not been deleted
 func validateIntersections(block *Block) bool {
-	//for each op in block, for each block in bc, for each op in block of bc, check if xmlstring of op1 intersections with op2
-	/*
-	func XMLStringsIntersect(shapeString1, shapeString2 string) bool {
-	parser := NewSVGParser()
-	shape1, _ := parser.ParseXMLString(shapeString1)
-	shape2, _ := parser.ParseXMLString(shapeString1)
-	return Intersects(shape1, shape2)
-}
 
-type Operation struct {
-	Delete  bool
-	SVG     string
-	SVGHash SVGHash
-	Owner   ecdsa.PublicKey
-	ValNum  uint8
-}
-
-type SVGHash struct {
-	Hash []byte
-	R, S *big.Int
-}
-*/
 	noIntersections := true
 	var toCheck []Operation
 	var theBlocks []Block
+
+	//for each op in block, for each block in bc, for each op in block of bc, check if xmlstring of op1 intersections with op2
 	for _, op := range block.Ops {
 		for _, bl := range blocks {
 			for _, blOp := range bl.Ops {
@@ -814,6 +797,7 @@ type SVGHash struct {
 					//check if intersecting op was deleted later. if it was then it's fine if not return false
 					toCheck = append(toCheck, blOp)
 					theBlocks = append(theBlocks, bl)
+					//if same shape is added and deleted multiple times, this still works
 				}
 				//else if they do not intersect move on to next op in block of blockchain
 			}
@@ -824,10 +808,9 @@ type SVGHash struct {
 		noIntersections = checkDeletes(toCheck, theBlocks)
 	}
 	return noIntersections
- 
 }
 
-//Returns true if there is -NOT- an identical op/opsig in blockchain
+//Returns true if there is -NOT- an identical op/opsig in blockchain that has not be later deleted
 func validateIdenticalSigs(block *Block) bool {
 	noIdenticalOps := true
 	var toCheck []Operation
@@ -914,6 +897,18 @@ func validateDelete(block *Block) bool {
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////
 //								END OF MINING, START OF UTILITIES											 //
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+//writes out block's nonce and prevhash and level
+func dumpBlockchain() {
+	fmt.Println("BlockChain visualizer 2000")
+	fmt.Println("in format of {[blockHash][prevHash][level]}")
+	for hash, block := range blocks {
+		level := ink.LengthFromTo(hash, ink.settings.GenesisBlockHash)
+		fmt.Printf("{[%v][%v][%v]}\n", hash, block.PrevHash, level)
+	}
+
+}
+
 
 func checkError(err error) {
 	if err != nil {
