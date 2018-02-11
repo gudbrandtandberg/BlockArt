@@ -104,9 +104,6 @@ type IMiner struct {
 
 	settings MinerNetSettings
 
-	tails        []*Block
-	currentBlock *Block
-
 	key ecdsa.PrivateKey
 }
 
@@ -223,6 +220,7 @@ func (m2m *MinerToMiner) ReceiveBlock(block *Block, reply *bool) (err error) {
 	if validateBlock(block, difficulty) {
 		fmt.Println("trying to validate")
 		for _, head := range ink.getBlockChainHeads() {
+			fmt.Println("checking", block2hash(&head.Block), block.PrevHash)
 			if block2hash(&head.Block) == block.PrevHash {
 				fmt.Println("validated")
 				newBlockCH <- *block
@@ -353,8 +351,15 @@ func (ink IMiner) Mine() (err error) {
 				if validateBlock(&currentBlock, difficulty) {
 					// successfully found nonce
 					log.Printf("found nonce: %s", currentBlock.Nonce)
+					prevHash := block2hash(&currentBlock)
 					foundBlockCH <- currentBlock // spit out the found block via channel
-					currentBlock = Block{PrevHash: block2hash(&currentBlock), MinedBy: ink.key.PublicKey}
+//					newBlockCH <- currentBlock // spit out the found block via channel
+					currentBlock = Block{
+						PrevHash: prevHash,
+						MinedBy: ink.key.PublicKey,
+						Ops: opQueue,
+					}
+					opQueue = make([]Operation, 0)
 					i = 0
 				}
 			}
@@ -382,8 +387,6 @@ func (ink IMiner) getBlockChainHeads() (heads []BlockNode) {
 var ink IMiner
 var miner2server MinerToServer
 var miner2miner MinerToMiner
-var blocks map[string]Block
-var bufferedOps []Operation
 
 var newOpsCH (chan Operation)
 var newBlockCH (chan Block)
@@ -434,7 +437,6 @@ func main() {
 	client, err := rpc.Dial("tcp", *ipPort)
 
 	l := tmp()
-	bufferedOps = make([]Operation, 0, math.MaxUint16)
 	ink = IMiner{
 		serverClient: client,
 		key:          *priv,
@@ -452,6 +454,9 @@ func main() {
 		Nonce: "1337",
 		MinedBy: ecdsa.PublicKey{},
 	}
+	genesisNode = BlockNode{
+		Block: genesisBlock,
+	}
 
 	go func() {
 		for {
@@ -459,7 +464,6 @@ func main() {
 			miner2miner.FloodToPeers(&minedBlock)
 		}
 	}()
-	ink.currentBlock = &genesisBlock
 	fmt.Println(err, ink.neighbours)
 
 	// Heartbeat server
