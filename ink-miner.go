@@ -582,7 +582,8 @@ func main() {
 	err = miner2server.GetNodes()
 	err = ink.GetBlockChain()
 
-	listenForArtNodes()
+	go listenForArtNodes()
+	defer clearMinerKeyFile()
 
 	genesisBlock := Block{
 		PrevHash: "foobar",
@@ -672,8 +673,7 @@ func listenForArtNodes() (err error) {
 
 	artNodeRPCAddr := l.Addr().String()
 	ink.artAddr = artNodeRPCAddr
-	writeMinerAddrKeyToFile(ink.artAddr, &ink.key)
-	defer clearMinerKeyFile(ink.artAddr)
+	writeMinerAddrKeyToFile()
 
 	if err != nil {
 		fmt.Println(err)
@@ -712,16 +712,16 @@ func encodeKey(key ecdsa.PrivateKey) (string, error) {
 	return keyString, nil
 }
 
-func writeMinerAddrKeyToFile(addr string, key *ecdsa.PrivateKey) {
-	keyString, _ := encodeKey(*key)
-	filename := "./keys/" + addr
+func writeMinerAddrKeyToFile() {
+	keyString, _ := encodeKey(ink.key)
+	filename := "./keys/" + ink.artAddr
 	fmt.Println("Writing file")
 	ioutil.WriteFile(filename, []byte(keyString), 0666)
 }
 
-func clearMinerKeyFile(addr string) {
+func clearMinerKeyFile() {
 	fmt.Println("Deleting file")
-	filename := "./keys/" + addr
+	filename := "./keys/" + ink.artAddr
 	os.Remove(filename)
 }
 
