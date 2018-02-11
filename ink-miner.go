@@ -1,4 +1,4 @@
-/*
+	/*
 
 	An ink miner mines ink and disseminates blocks
 
@@ -10,7 +10,7 @@
 package main
 
 import (
-	//"./blockartlib"
+	"./blockartlib"
 	"bytes"
 	"crypto/ecdsa"
 	"crypto/elliptic"
@@ -205,9 +205,10 @@ func (m2m *MinerToMiner) HeartbeatNeighbours() (err error) {
 		time.Sleep(2 * time.Second)
 		//if we have good neighbours, return
 		fmt.Println("len neighbours, minminers, neighbours: ", len(ink.neighbours), ink.settings.MinNumMinerConnections, ink.neighbours)
-		if len(ink.neighbours) >= int(ink.settings.MinNumMinerConnections) {
+		if ((len(ink.neighbours) >= int(ink.settings.MinNumMinerConnections)) || (len(ink.neighbours) == 0)) {
 			return
 		}
+
 		//else we get more neighbours
 		err = miner2server.GetNodes()
 		checkError(err)
@@ -368,6 +369,7 @@ func (ink IMiner) GetBlockChain() (err error) {
 }
 
 func (ink IMiner) Mine() (err error) {
+	fmt.Println("started mining")
 	var i uint64 = 0
 	opQueue := make([]Operation, 0)
 	difficulty := ink.settings.PoWDifficultyNoOpBlock
@@ -780,7 +782,49 @@ func validateOpSigs(block *Block) bool {
 // TODO
 //Returns true if there are -NOT- any intersections with any shapes already in blockchain
 func validateIntersections(block *Block) bool {
-	return true
+	//for each op in block, for each block in bc, for each op in block of bc, check if xmlstring of op1 intersections with op2
+	/*
+	func XMLStringsIntersect(shapeString1, shapeString2 string) bool {
+	parser := NewSVGParser()
+	shape1, _ := parser.ParseXMLString(shapeString1)
+	shape2, _ := parser.ParseXMLString(shapeString1)
+	return Intersects(shape1, shape2)
+}
+
+type Operation struct {
+	Delete  bool
+	SVG     string
+	SVGHash SVGHash
+	Owner   ecdsa.PublicKey
+	ValNum  uint8
+}
+
+type SVGHash struct {
+	Hash []byte
+	R, S *big.Int
+}
+*/
+	noIntersections := true
+	var toCheck []Operation
+	var theBlocks []Block
+	for _, op := range block.Ops {
+		for _, bl := range blocks {
+			for _, blOp := range bl.Ops {
+				if blockartlib.XMLStringsIntersect(op.SVG, blOp.SVG) {
+					//check if intersecting op was deleted later. if it was then it's fine if not return false
+					toCheck = append(toCheck, blOp)
+					theBlocks = append(theBlocks, bl)
+				}
+				//else if they do not intersect move on to next op in block of blockchain
+			}
+		}
+	}
+
+	if len(toCheck) > 0 {
+		noIntersections = checkDeletes(toCheck, theBlocks)
+	}
+	return noIntersections
+ 
 }
 
 //Returns true if there is -NOT- an identical op/opsig in blockchain
@@ -834,12 +878,9 @@ iLoop:
 				}
 			}
 		}
-
 		return false
 	}
-
 	return true
-
 }
 
 //TODO
