@@ -169,7 +169,22 @@ func (m2m *MinerToMiner) FloodToPeers(block *Block) (err error) {
 	return
 }
 
-func (m2m2 *MinerToMiner) GetHeartbeats(inc string, out *string) (err error) {
+func (m2m2 *MinerToMiner) GetHeartbeats(incAddr string, out *string) (err error) {
+	neighbourlock.Lock()
+	neighbourlock.Unlock()
+
+	_, check := ink.neighbours[incAddr]
+
+	if !check {
+		//if neighbour doesn't exist
+			client, err := rpc.Dial("tcp", incAddr)
+			if err == nil {
+				ink.neighbours[incAddr] = client
+			} else {
+				fmt.Println(err)
+			}	
+		}
+
 	*out = "hello i'm online"
 	return
 }
@@ -192,11 +207,13 @@ func (m2m *MinerToMiner) FetchBlockChain(i string, blockchain *[]Block) (err err
 
 func (m2m *MinerToMiner) HeartbeatNeighbours() (err error) {
 	for {
+		neighbourlock.Lock()
+		defer neighbourlock.Unlock()
 		for neighbourAddr, neighbourRPC := range ink.neighbours {
 			var rep string
 			timeout := make(chan error, 1)
 			go func() {
-				timeout <- neighbourRPC.Call("MinerToMiner.GetHeartbeats", "", &rep)
+				timeout <- neighbourRPC.Call("MinerToMiner.GetHeartbeats", ink.localAddr.String(), &rep)
 			}()
 			select {
 			case err := <-timeout:
@@ -324,6 +341,8 @@ func (m2s *MinerToServer) Register() (err error) {
 
 // GetNodes makes RPC GetNodes(pubKey) call, makes a call to ConnectToNeighbour for each returned addr, can return errors
 func (m2s *MinerToServer) GetNodes() (err error) {
+	neighbourlock.Lock()
+	defer neighbourlock.Unlock()
 	minerAddresses := make([]net.Addr, 0)
 	err = ink.serverClient.Call("RServer.GetNodes", ink.key.PublicKey, &minerAddresses)
 	fmt.Println("mineraddrs: ", minerAddresses)
@@ -360,6 +379,9 @@ func (ink IMiner) GetBlockChain() (err error) {
 	fmt.Println("locking9")
 	maplock.Lock()
 	fmt.Println("locked9")
+
+	neighbourlock.Lock()
+	defer neighbourlock.Unlock()
 	for _, neighbour := range ink.neighbours {
 		blockChain := make([]Block, 0)
 		err = neighbour.Call("MinerToMiner.FetchBlockChain", "", &blockChain)
@@ -536,6 +558,8 @@ var newBlockCH (chan Block)
 var foundBlockCH (chan Block)
 
 var maplock sync.RWMutex
+var neighbourlock sync.RWMutex
+
 
 func tmp() net.Addr {
 	server := rpc.NewServer()
@@ -602,6 +626,7 @@ func main() {
 			miner2miner.FloodToPeers(&minedBlock)
 		}
 	}()
+
 	fmt.Println(err, ink.neighbours)
 
 	// Heartbeat server
