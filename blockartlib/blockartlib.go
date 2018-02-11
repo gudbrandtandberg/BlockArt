@@ -13,7 +13,9 @@ import (
 	"crypto/x509"
 	"encoding/gob"
 	"encoding/hex"
+	"errors"
 	"fmt"
+	"log"
 	"math/big"
 	"net/rpc"
 )
@@ -244,13 +246,9 @@ func (c BACanvas) AddShape(validateNum uint8, shapeType ShapeType, shapeSvgStrin
 	op.Delete = false
 	op.Owner = c.privKey.PublicKey
 	op.SVG = shape.XMLString()
-	h := md5.New()
-	shHash := h.Sum([]byte(op.Svg))
-	r, s, err := ecdsa.Sign(rand.Reader, &c.privKey, shHash)
-	op.SvgHash = SVGHash{shHash, r, s}
-	shapeHash = string(shHash)
+	op.SVGHash = signShapeString(op.SVG, &c.privKey)
 
-	err = minerClient.Call("RMiner.AddShape", op, nil)
+	err = minerClient.Call("RMiner.RecordAddOp", op, nil)
 	if err != nil {
 		return
 	}
@@ -279,6 +277,21 @@ func (c BACanvas) GetInk() (inkRemaining uint32, err error) {
 // - DisconnectedError
 // - ShapeOwnerError
 func (c BACanvas) DeleteShape(validateNum uint8, shapeHash string) (inkRemaining uint32, err error) {
+
+	// local checks done, send op to miner
+	var op Operation
+	op.Delete = true
+	op.Owner = c.privKey.PublicKey
+	op.SVG = shapeHash
+	op.SVGHash = signShapeString(op.SVG, &c.privKey)
+	op.ValNum = validateNum
+
+	err = minerClient.Call("RMiner.RecordDeleteOp", op, nil)
+	if err != nil {
+		return
+	}
+	fmt.Println("everything went well")
+
 	return
 }
 
@@ -317,6 +330,17 @@ func (c BACanvas) CloseCanvas() (inkRemaining uint32, err error) {
 ////////////////////////////////////////////////////////////////////////////////////////////
 // <EXTRA STUFF>
 
+func signShapeString(shapeString string, key *ecdsa.PrivateKey) SVGHash {
+	h := md5.New()
+	shapeHash := h.Sum([]byte(shapeString))
+	r, s, err := ecdsa.Sign(rand.Reader, key, shapeHash)
+	if err != nil {
+		log.Fatal(errors.New("Can't sign shape"))
+	}
+
+	return SVGHash{shapeHash, r, s}
+}
+
 func hashPrivateKey(key ecdsa.PrivateKey) [16]byte {
 	keyBytes, _ := x509.MarshalECPrivateKey(&key)
 	return md5.Sum(keyBytes)
@@ -336,6 +360,7 @@ type Operation struct {
 	SVG     string
 	SVGHash SVGHash
 	Owner   ecdsa.PublicKey
+	ValNum  uint8
 }
 type SVGHash struct {
 	Hash []byte

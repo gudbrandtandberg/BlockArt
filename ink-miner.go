@@ -114,6 +114,7 @@ type Operation struct {
 	SVG     string
 	SVGHash SVGHash
 	Owner   ecdsa.PublicKey
+	ValNum  uint8
 }
 type SVGHash struct {
 	Hash []byte
@@ -484,10 +485,15 @@ func (m *RMiner) OpenCanvas(keyHash [16]byte, reply *CanvasSettings) error {
 	return nil
 }
 
-func (m *RMiner) AddShape(op Operation, reply *string) error {
+func (m *RMiner) RecordDeleteOp(op Operation, reply *string) error {
+	fmt.Println("Will delete:")
+	fmt.Println(op.SVG)
+	return nil
+}
 
-	fmt.Println(op)
-
+func (m *RMiner) RecordAddOp(op Operation, reply *string) error {
+	fmt.Println("Will add:")
+	fmt.Println(op.SVG)
 	return nil
 }
 
