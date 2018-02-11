@@ -54,7 +54,7 @@ type Components []Component
 
 // A Shape represents a shape
 type Shape interface {
-	Area() float64
+	Area() uint32
 	XMLString() string
 }
 
@@ -82,19 +82,19 @@ func (c CircleShape) radius() float64 {
 }
 
 // Area returns the area of a path element
-func (p PathShape) Area() float64 {
+func (p PathShape) Area() uint32 {
 	if p.fill != "transparent" {
-		return ShapeArea(p.components[0])
+		return uint32(math.Ceil(ShapeArea(p.components[0])))
 	}
-	return LineArea(p.components)
+	return uint32(math.Ceil(LineArea(p.components)))
 }
 
 // Area returns the area of a circle element
-func (c CircleShape) Area() float64 {
+func (c CircleShape) Area() uint32 {
 	if c.fill != "transparent" {
-		return math.Pi * math.Pow(c.r, 2)
+		return uint32(math.Ceil(math.Pi * math.Pow(c.r, 2)))
 	}
-	return 2 * math.Pi * c.r
+	return uint32(math.Ceil(2 * math.Pi * c.r))
 }
 
 var pathTemplate = "<svg><path d='{{.SVGString}}' fill='{{.Fill}}' stroke='{{.Stroke}}'/></svg>"
