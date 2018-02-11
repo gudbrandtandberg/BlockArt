@@ -470,11 +470,21 @@ func (m *RMiner) OpenCanvas(keyHash [16]byte, reply *CanvasSettings) error {
 func (m *RMiner) RecordDeleteOp(op Operation, reply *string) error {
 	fmt.Println("Will delete:")
 	fmt.Println(op.SVG)
+
+	if !ecdsa.Verify(&ink.key.PublicKey, op.SVGHash.Hash, op.SVGHash.R, op.SVGHash.S) {
+		return errors.New("Invalid signature")
+	}
+
 	return nil
 }
 
 func (m *RMiner) RecordAddOp(op Operation, reply *string) error {
 	fmt.Println("Will add this shape to my current block:")
+
+	if !ecdsa.Verify(&ink.key.PublicKey, op.SVGHash.Hash, op.SVGHash.R, op.SVGHash.S) {
+		return errors.New("Invalid signature")
+	}
+
 	fmt.Println(op.SVG)
 	return nil
 }

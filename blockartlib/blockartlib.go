@@ -247,7 +247,6 @@ func (c BACanvas) AddShape(validateNum uint8, shapeType ShapeType, shapeSvgStrin
 	op.Owner = c.privKey.PublicKey
 	op.SVG = shape.XMLString()
 	op.SVGHash = signShapeString(op.SVG, &c.privKey)
-
 	shapeHash = hex.EncodeToString(op.SVGHash.Hash)
 
 	err = minerClient.Call("RMiner.RecordAddOp", op, nil)
