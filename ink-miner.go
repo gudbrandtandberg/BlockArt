@@ -590,7 +590,7 @@ func main() {
 		for {
 			miner2server.HeartbeatServer()
 			fmt.Println(len(newBlockCH))
-			time.Sleep(time.Millisecond * 50)
+			time.Sleep(time.Millisecond * 5)
 		}
 	}()
 	miner2miner.HeartbeatNeighbours()
