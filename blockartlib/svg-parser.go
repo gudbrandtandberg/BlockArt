@@ -8,6 +8,7 @@ package blockartlib
 
 import (
 	"bytes"
+	"encoding/xml"
 	"errors"
 	"fmt"
 	"html/template"
@@ -130,6 +131,44 @@ type SVGParser struct {
 func NewSVGParser() *SVGParser {
 	parser := SVGParser{}
 	return &parser
+}
+
+type SVGXML struct {
+	Path   PathXML   `xml:"path"`
+	Circle CircleXML `xml:"circle"`
+}
+type PathXML struct {
+	SVGString string `xml:"d,attr"`
+	Fill      string `xml:"fill,attr"`
+	Stroke    string `xml:"stroke,attr"`
+}
+
+type CircleXML struct {
+	Cx     string `xml:"cx,attr"`
+	Cy     string `xml:"cy,attr"`
+	R      string `xml:"r,attr"`
+	Fill   string `xml:"fill,attr"`
+	Stroke string `xml:"stroke,attr"`
+}
+
+func (p *SVGParser) ParseXMLString(XMLString string) (shape Shape, err error) {
+	var svg SVGXML
+	err = xml.Unmarshal([]byte(XMLString), &svg)
+	if err != nil {
+		return
+	}
+
+	nullPath := PathXML{}
+	nullCircle := CircleXML{}
+
+	if svg.Path != nullPath {
+		return p.Parse(PATH, svg.Path.SVGString, svg.Path.Fill, svg.Path.Stroke)
+	} else if svg.Circle != nullCircle {
+		SVGString := svg.Circle.Cx + ", " + svg.Circle.Cy + ", " + svg.Circle.R
+		return p.Parse(CIRCLE, SVGString, svg.Circle.Fill, svg.Circle.Stroke)
+	}
+	fmt.Println("bottomed out, should not be here.. ")
+	return
 }
 
 // Parse parses an SVG string and returns a list of components
