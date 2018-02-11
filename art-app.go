@@ -17,9 +17,10 @@ package main
 // this art-app.go file
 import (
 	"crypto/ecdsa"
-	"crypto/elliptic"
-	"crypto/rand"
+	"crypto/x509"
+	"encoding/hex"
 	"fmt"
+	"io/ioutil"
 	"os"
 
 	"./blockartlib"
@@ -44,13 +45,27 @@ var examples = map[string]string{
 	"pathintersects": "L 3 3 l 0 -3 z",
 }
 
+func decodeKey(hexStr string) (key *ecdsa.PrivateKey, err error) {
+	keyBytes, err := hex.DecodeString(hexStr)
+	if err != nil {
+		return key, err
+	}
+	return x509.ParseECPrivateKey(keyBytes)
+}
+
 func main() {
 
 	testParser()
 	return
-	minerAddr := "127.0.0.1:8080"
-	curve := elliptic.P384()
-	privKey, err := ecdsa.GenerateKey(curve, rand.Reader)
+	minerAddr := "127.0.0.1:9878"
+	// curve := elliptic.P384()
+	// privKey, err := ecdsa.GenerateKey(curve, rand.Reader)
+
+	keyBytes, err := ioutil.ReadFile("keys/key.txt")
+	privKey, err := decodeKey(string(keyBytes))
+	if err != nil {
+		fmt.Println("Could not decode key")
+	}
 
 	//Open a canvas.
 	canvas, _, err := blockartlib.OpenCanvas(minerAddr, *privKey)
@@ -61,10 +76,19 @@ func main() {
 	validateNum := uint8(2)
 
 	// Add a line.
-	_, _, _, err = canvas.AddShape(validateNum, blockartlib.PATH, "M 0 0 L 0 5", "transparent", "red")
+	shapeHash, _, _, err := canvas.AddShape(validateNum, blockartlib.PATH, "M 0 0 L 0 5", "transparent", "red")
 	if checkError(err) != nil {
 		return
 	}
+
+	fmt.Println("Will delete", shapeHash)
+
+	_, err = canvas.DeleteShape(validateNum, shapeHash)
+	if checkError(err) != nil {
+		return
+	}
+
+	return
 
 	// Add two lines.
 	_, _, _, err = canvas.AddShape(validateNum, blockartlib.PATH, "M 0 0 L 0 5 M 0 1 h 5", "transparent", "red")
@@ -129,9 +153,22 @@ func testParser() {
 	fmt.Println(shape1)
 	fmt.Println(shape2)
 
-	intersects := blockartlib.Intersects(shape2, shape1)
-
+	intersects := blockartlib.Intersects(shape1, shape2)
 	fmt.Println("Shapes intersect:", intersects)
+	intersects = blockartlib.XMLStringsIntersect(shape1.XMLString(), shape2.XMLString())
+	fmt.Println("Shape XML strings intersect:", intersects)
+
+	shape3, _ := parser.Parse(blockartlib.PATH, "M 0 0 l 100 100", "transparent", "black")
+	fmt.Println(shape3.XMLString())
+
+	shape4, _ := parser.Parse(blockartlib.CIRCLE, "4, 5, 3", "transparent", "black")
+	fmt.Println(shape4.XMLString())
+
+	shape5, _ := parser.ParseXMLString(shape3.XMLString())
+	fmt.Println(shape5)
+
+	shape6, _ := parser.ParseXMLString(shape4.XMLString())
+	fmt.Println(shape6)
 
 	return
 }
