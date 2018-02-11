@@ -299,7 +299,7 @@ type CanvasSettings struct {
 
 // Register makes RPC Register(localAddr, pubKey) call, and registers settings returned for canvas or returns error
 func (m2s *MinerToServer) Register() (err error) {
-	fmt.Println("localaddr: " , ink.localAddr)
+	fmt.Println("localaddr: ", ink.localAddr)
 	m := &MinerInfo{
 		Address: ink.localAddr,
 		Key:     ink.key.PublicKey,
@@ -585,9 +585,7 @@ func main() {
 		MinedBy:  ecdsa.PublicKey{},
 	}
 
-	// For now: write key to file
-	keyString, _ := encodeKey(*priv)
-	ioutil.WriteFile("./keys/key.txt", []byte(keyString), 0666)
+	writeMinerAddrKeyToFile(ink.localAddr.String(), &ink.key)
 
 	go func() {
 		for {
@@ -702,8 +700,14 @@ func encodeKey(key ecdsa.PrivateKey) (string, error) {
 	return keyString, nil
 }
 
+func writeMinerAddrKeyToFile(addr string, key *ecdsa.PrivateKey) {
+	keyString, _ := encodeKey(*key)
+	filename := "./keys/" + addr
+	ioutil.WriteFile("./keys/", []byte(keyString), 0666)
+}
+
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////
-//								END OF METHODS, START OF VALIDATION										 	 //
+//								END OF ART2MINER, START OF VALIDATION										 	 //
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 func block2hash(block *Block) string {
