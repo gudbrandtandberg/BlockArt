@@ -7,11 +7,14 @@ package blockartlib
 
 import (
 	"crypto/ecdsa"
+	"crypto/elliptic"
 	"crypto/md5"
+	"crypto/rand"
 	"crypto/x509"
 	"encoding/gob"
 	"encoding/hex"
 	"fmt"
+	"math/big"
 	"net/rpc"
 )
 
@@ -169,6 +172,8 @@ type Canvas interface {
 // - DisconnectedError
 func OpenCanvas(minerAddr string, privKey ecdsa.PrivateKey) (canvas Canvas, setting CanvasSettings, err error) {
 	gob.Register(ecdsa.PrivateKey{})
+	gob.Register(&elliptic.CurveParams{})
+	gob.Register(Operation{})
 
 	client, err := rpc.Dial("tcp", minerAddr)
 	if err != nil {
@@ -184,7 +189,7 @@ func OpenCanvas(minerAddr string, privKey ecdsa.PrivateKey) (canvas Canvas, sett
 		return
 	}
 
-	canvas = BACanvas{setting}
+	canvas = BACanvas{setting, privKey}
 
 	return canvas, setting, nil
 }
@@ -196,6 +201,7 @@ func OpenCanvas(minerAddr string, privKey ecdsa.PrivateKey) (canvas Canvas, sett
 // The BACanvas object implements the Canvas interface.
 type BACanvas struct {
 	settings CanvasSettings
+	privKey  ecdsa.PrivateKey
 }
 
 // AddShape adds a new shape to the canvas.
@@ -207,6 +213,7 @@ type BACanvas struct {
 // - ShapeOverlapError
 // - OutOfBoundsError
 func (c BACanvas) AddShape(validateNum uint8, shapeType ShapeType, shapeSvgString string, fill string, stroke string) (shapeHash string, blockHash string, inkRemaining uint32, err error) {
+
 	parser := NewSVGParser()
 	shape, err := parser.Parse(shapeType, shapeSvgString, fill, stroke)
 
@@ -232,8 +239,17 @@ func (c BACanvas) AddShape(validateNum uint8, shapeType ShapeType, shapeSvgStrin
 		}
 	}
 
-	// local checks done, query miner
-	err = minerClient.Call("RMiner.AddShape", "", nil)
+	// local checks done, send op to miner
+	var op Operation
+	op.Owner = c.privKey.PublicKey
+	op.Svg = shape.XMLString()
+	h := md5.New()
+	shHash := h.Sum([]byte(op.Svg))
+	r, s, err := ecdsa.Sign(rand.Reader, &c.privKey, shHash)
+	op.SvgHash = SVGHash{shHash, r, s}
+	shapeHash = string(shHash)
+
+	err = minerClient.Call("RMiner.AddShape", op, nil)
 	if err != nil {
 		return
 	}
@@ -312,6 +328,16 @@ func encodeKey(key ecdsa.PrivateKey) (string, error) {
 	}
 	keyString := hex.EncodeToString(keyBytes)
 	return keyString, nil
+}
+
+type Operation struct {
+	Svg     string
+	SvgHash SVGHash
+	Owner   ecdsa.PublicKey
+}
+type SVGHash struct {
+	Hash []byte
+	R, S *big.Int
 }
 
 // </EXTRA STUFF>

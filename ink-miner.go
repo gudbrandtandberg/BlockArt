@@ -24,6 +24,7 @@ import (
 	"io/ioutil"
 	"log"
 	"math"
+	"math/big"
 	"net"
 	"net/rpc"
 	"strconv"
@@ -113,10 +114,14 @@ type IMiner struct {
 }
 
 type Operation struct {
-	Svg   string
-	Owner ecdsa.PublicKey
+	Svg     string
+	SvgHash SVGHash
+	Owner   ecdsa.PublicKey
 }
-
+type SVGHash struct {
+	Hash []byte
+	R, S *big.Int
+}
 type BlockNode struct {
 	Block    Block
 	Children []BlockNode
@@ -464,7 +469,9 @@ func (m *RMiner) OpenCanvas(keyHash [16]byte, reply *CanvasSettings) error {
 	return nil
 }
 
-func (m *RMiner) AddShape(args string, reply *string) error {
+func (m *RMiner) AddShape(op Operation, reply *string) error {
+
+	fmt.Println(op)
 
 	return nil
 }
@@ -472,6 +479,7 @@ func (m *RMiner) AddShape(args string, reply *string) error {
 func listenForArtNodes() {
 	gob.Register(ecdsa.PrivateKey{})
 	gob.Register(&elliptic.CurveParams{})
+	gob.Register(Operation{})
 
 	artServer := rpc.NewServer()
 	rminer := new(RMiner)

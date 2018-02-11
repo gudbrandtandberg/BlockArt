@@ -7,8 +7,10 @@ intersection of parsed shapes (TO BE INCLUDED IN blockartlib.go)
 package blockartlib
 
 import (
+	"bytes"
 	"errors"
 	"fmt"
+	"html/template"
 	"math"
 	"strconv"
 	"strings"
@@ -52,10 +54,12 @@ type Components []Component
 // A Shape represents a shape
 type Shape interface {
 	Area() float64
+	XMLString() string
 }
 
 // A PathShape represents a path shape
 type PathShape struct {
+	d          string
 	components Components
 	fill       string
 	stroke     string
@@ -92,6 +96,32 @@ func (c CircleShape) Area() float64 {
 	return 2 * math.Pi * c.r
 }
 
+var pathTemplate = "<svg><path d='{{.SVGString}}' fill='{{.Fill}}' stroke='{{.Stroke}}'/></svg>"
+
+var circleTemplate = "<svg><circle cx='{{.Cx}}' cy='{{.Cy}}' r='{{.R}}' fill='{{.Fill}}' stroke='{{.Stroke}}'/></svg>"
+
+func (p PathShape) XMLString() string {
+	data := struct{ SVGString, Fill, Stroke string }{p.d, p.fill, p.stroke}
+	tmpl, _ := template.New("").Parse(pathTemplate)
+	var b bytes.Buffer
+	_ = tmpl.Execute(&b, data)
+	return b.String()
+}
+
+func (c CircleShape) XMLString() string {
+	cx := strconv.FormatFloat(c.cx, 'f', -1, 64)
+	cy := strconv.FormatFloat(c.cy, 'f', -1, 64)
+	r := strconv.FormatFloat(c.r, 'f', -1, 64)
+	data := struct{ Cx, Cy, R, Fill, Stroke string }{cx, cy, r, c.fill, c.stroke}
+	tmpl, err := template.New("").Parse(circleTemplate)
+	var b bytes.Buffer
+	err = tmpl.Execute(&b, data)
+	if err != nil {
+		return err.Error()
+	}
+	return b.String()
+}
+
 // An SVGParser parses SVG shape commands into point-based datastructures
 // (need not be a struct as of now, but might be useful later..)
 type SVGParser struct {
@@ -112,7 +142,6 @@ func (p *SVGParser) Parse(shapeType ShapeType, svgString, fill, stroke string) (
 	if len(svgString) > 128 {
 		return nil, ShapeSvgStringTooLongError(svgString)
 	}
-
 	if shapeType == CIRCLE {
 		return parseCircle(svgString, fill, stroke)
 	} else if shapeType == PATH {
@@ -228,7 +257,7 @@ func parseShape(svgString, fill, stroke string) (Shape, error) {
 	}
 	components = append(components, component)
 
-	return PathShape{components, fill, stroke}, nil
+	return PathShape{svgString, components, fill, stroke}, nil
 }
 
 func getCommand(reader *strings.Reader) (string, error) {
