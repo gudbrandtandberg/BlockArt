@@ -97,7 +97,6 @@ func (c CircleShape) Area() float64 {
 }
 
 var pathTemplate = "<svg><path d='{{.SVGString}}' fill='{{.Fill}}' stroke='{{.Stroke}}'/></svg>"
-
 var circleTemplate = "<svg><circle cx='{{.Cx}}' cy='{{.Cy}}' r='{{.R}}' fill='{{.Fill}}' stroke='{{.Stroke}}'/></svg>"
 
 func (p PathShape) XMLString() string {

@@ -114,8 +114,9 @@ type IMiner struct {
 }
 
 type Operation struct {
-	Svg     string
-	SvgHash SVGHash
+	Delete  bool
+	SVG     string
+	SVGHash SVGHash
 	Owner   ecdsa.PublicKey
 }
 type SVGHash struct {

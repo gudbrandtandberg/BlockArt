@@ -241,8 +241,9 @@ func (c BACanvas) AddShape(validateNum uint8, shapeType ShapeType, shapeSvgStrin
 
 	// local checks done, send op to miner
 	var op Operation
+	op.Delete = false
 	op.Owner = c.privKey.PublicKey
-	op.Svg = shape.XMLString()
+	op.SVG = shape.XMLString()
 	h := md5.New()
 	shHash := h.Sum([]byte(op.Svg))
 	r, s, err := ecdsa.Sign(rand.Reader, &c.privKey, shHash)
@@ -331,8 +332,9 @@ func encodeKey(key ecdsa.PrivateKey) (string, error) {
 }
 
 type Operation struct {
-	Svg     string
-	SvgHash SVGHash
+	Delete  bool
+	SVG     string
+	SVGHash SVGHash
 	Owner   ecdsa.PublicKey
 }
 type SVGHash struct {

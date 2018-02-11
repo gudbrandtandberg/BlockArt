@@ -55,8 +55,8 @@ func decodeKey(hexStr string) (key *ecdsa.PrivateKey, err error) {
 
 func main() {
 
-	testParser()
-	return
+	// testParser()
+	// return
 	minerAddr := "127.0.0.1:9878"
 	// curve := elliptic.P384()
 	// privKey, err := ecdsa.GenerateKey(curve, rand.Reader)
