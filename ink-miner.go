@@ -28,6 +28,7 @@ import (
 	"math/big"
 	"net"
 	"net/rpc"
+	"os"
 	"strconv"
 	"strings"
 	"sync"
@@ -105,6 +106,7 @@ type MinerFromANode struct{}
 type IMiner struct {
 	serverClient *rpc.Client
 	localAddr    net.Addr
+	artAddr      string
 	neighbours   map[string]*rpc.Client
 
 	settings MinerNetSettings
@@ -571,6 +573,7 @@ func main() {
 		serverClient: client,
 		key:          *priv,
 		localAddr:    l,
+		artAddr:      "", // <-- this is set in listenForArtNodes()
 		neighbours:   make(map[string]*rpc.Client),
 	}
 
@@ -579,13 +582,13 @@ func main() {
 	err = miner2server.GetNodes()
 	err = ink.GetBlockChain()
 
+	listenForArtNodes()
+
 	genesisBlock := Block{
 		PrevHash: "foobar",
 		Nonce:    "1337",
 		MinedBy:  ecdsa.PublicKey{},
 	}
-
-	writeMinerAddrKeyToFile(ink.localAddr.String(), &ink.key)
 
 	go func() {
 		for {
@@ -610,7 +613,7 @@ func main() {
 	newBlockCH <- genesisBlock
 
 	// Listen incoming RPC calls from artnodes
-	listenForArtNodes()
+	//listenForArtNodes()
 }
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -627,8 +630,8 @@ func (m *RMiner) OpenCanvas(keyHash [16]byte, reply *CanvasSettings) error {
 		return errors.New("Miner: The key you are connecting with is not correct")
 	}
 
-	//*reply = ink.settings.CanvasSettings <-- should have queried the server first
-	*reply = CanvasSettings{1024, 1024} // <-- for now..
+	*reply = ink.settings.CanvasSettings // <-- should have queried the server first
+	//*reply = CanvasSettings{1024, 1024} // <-- for now..
 
 	return nil
 }
@@ -665,14 +668,23 @@ func listenForArtNodes() (err error) {
 	artServer := rpc.NewServer()
 	rminer := new(RMiner)
 	artServer.Register(rminer)
-	l, err := net.Listen("tcp", "127.0.0.1:0") // get address from global ink
+	l, err := net.Listen("tcp", ":0") // get address from global ink
+
+	artNodeRPCAddr := l.Addr().String()
+	ink.artAddr = artNodeRPCAddr
+	writeMinerAddrKeyToFile(ink.artAddr, &ink.key)
+	defer clearMinerKeyFile(ink.artAddr)
+
 	if err != nil {
 		fmt.Println(err)
 		return
 	}
 	fmt.Printf("Artserver started. Receiving on %s\n", ink.localAddr)
 	for {
-		conn, _ := l.Accept()
+		conn, err := l.Accept()
+		if err != nil {
+			return err
+		}
 		go artServer.ServeConn(conn)
 	}
 }
@@ -703,7 +715,14 @@ func encodeKey(key ecdsa.PrivateKey) (string, error) {
 func writeMinerAddrKeyToFile(addr string, key *ecdsa.PrivateKey) {
 	keyString, _ := encodeKey(*key)
 	filename := "./keys/" + addr
+	fmt.Println("Writing file")
 	ioutil.WriteFile(filename, []byte(keyString), 0666)
+}
+
+func clearMinerKeyFile(addr string) {
+	fmt.Println("Deleting file")
+	filename := "./keys/" + addr
+	os.Remove(filename)
 }
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////
