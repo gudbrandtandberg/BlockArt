@@ -530,7 +530,7 @@ func circlesIntersect(c1, c2 CircleShape) bool {
 	}
 
 	minRad := argmin(c1.radius(), c2.radius()) + 1
-	fmt.Println(minRad)
+
 	if minRad == 1 { // c1 is smallest
 		if delta-c1.radius() <= c2.radius() {
 			if c2.fill != "transparent" {

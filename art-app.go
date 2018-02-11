@@ -153,9 +153,10 @@ func testParser() {
 	fmt.Println(shape1)
 	fmt.Println(shape2)
 
-	intersects := blockartlib.Intersects(shape2, shape1)
-
+	intersects := blockartlib.Intersects(shape1, shape2)
 	fmt.Println("Shapes intersect:", intersects)
+	intersects = blockartlib.XMLStringsIntersect(shape1.XMLString(), shape2.XMLString())
+	fmt.Println("Shape XML strings intersect:", intersects)
 
 	shape3, _ := parser.Parse(blockartlib.PATH, "M 0 0 l 100 100", "transparent", "black")
 	fmt.Println(shape3.XMLString())
@@ -168,5 +169,6 @@ func testParser() {
 
 	shape6, _ := parser.ParseXMLString(shape4.XMLString())
 	fmt.Println(shape6)
+
 	return
 }
