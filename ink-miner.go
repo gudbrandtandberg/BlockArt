@@ -36,11 +36,9 @@ import (
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 type MinerToMinerInterface interface {
-	ConnectToNeighbour() error
 	FloodToPeers(block *Block) error
 	HeartbeatNeighbours() error
 	GetHeartbeats() error
-	RegisterNeighbour() error
 	ReceiveBlock(block *Block, reply *bool) (err error)
 }
 
@@ -84,8 +82,7 @@ type IMinerInterface interface {
 	Mine() error
 }
 
-type BlockInterface interface{}
-
+type BlockInterface interface {}
 // methods for validation, blockchain itself
 type BlockChainInterface interface {
 	ValidateBlock(BlockInterface) error
@@ -168,10 +165,6 @@ func (art MinerFromANode) GetChildren(hash string, childrenHashes *[]string) (er
 	return InvalidBlockHashError(hash)
 }
 
-func (m2m *MinerToMiner) ConnectToNeighbour() (err error) {
-	return
-}
-
 func (m2m *MinerToMiner) FloodToPeers(block *Block) (err error) {
 	fmt.Println("Sent", block.Nonce, block2hash(block))
 
@@ -216,10 +209,6 @@ func (m2m *MinerToMiner) HeartbeatNeighbours() (err error) {
 		err = miner2server.GetNodes()
 		checkError(err)
 	}
-}
-
-func (m2m *MinerToMiner) RegisterNeighbour() (err error) {
-	return
 }
 
 func (m2m *MinerToMiner) ReceiveBlock(block *Block, reply *bool) (err error) {
@@ -519,7 +508,6 @@ func validateBlock(block *Block, difficulty uint8) bool {
 	validNonce := validateNonce(block, difficulty)
 	validOps := validateOps(block)
 	validPrevHash := validatePrevHash(block)
-
 	return (validNonce && validOps && validPrevHash)
 }
 
@@ -536,14 +524,6 @@ func validatePrevHash(block *Block) bool {
 }
 
 /*
-Ops      []Operation
-
-type Operation struct {
-	Svg string
-	SvgHash []byte
-	Owner ecdsa.PublicKey
-}
-
 Operation validations:
 	Check that each operation has sufficient ink associated with the public key that generated the operation.
 	Check that each operation does not violate the shape intersection policy described above.
@@ -570,6 +550,7 @@ func validateOpSigs(block *Block) bool {
 	return allTrue
 }
 
+// TODO 
 //Returns true if there are -NOT- any intersections with any shapes already in blockchain
 func validateIntersections(block *Block) bool {
 	return true
@@ -634,27 +615,50 @@ iLoop:
 
 }
 
-/*
-Ops      []Operation
 
-type Operation struct {
-	Svg string
-	SvgHash []byte
-	Owner ecdsa.PublicKey
-}
-*/
-
+//TODO
 //Returns true if shape is in blockchain and not previously deleted and is a delete
 func validateDelete(block *Block) bool {
 	allPossible := true
+	tipOfChain, err := ink.GetLongestChain()
+	checkError(err)
 	for _, op := range block.Ops {
 		if op.Delete {
 			//if it's a delete, handle it, if it's not a delete ignore
-
+			shapeHash := op.SVG
+			currBlock := tipOfChain
+			BlockSelectionLoop:
+			for currBlock.PrevHash != ink.settings.GenesisBlockHash {
+				for _, o := range currBlock.Ops {
+					if hex.EncodeToString(o.SVGHash.Hash) == shapeHash {
+						break BlockSelectionLoop
+					}
+				}
+				*currBlock = blocks[currBlock.PrevHash]
+			}
+			if currBlock.PrevHash == ink.settings.GenesisBlockHash {
+				return false
+			}
 		}
 	}
 	return allPossible
 }
+
+/*
+type Operation struct {
+	Delete  bool
+	SVG     string
+	SVGHash SVGHash
+	Owner   ecdsa.PublicKey
+}
+
+type SVGHash struct {
+	Hash []byte
+	R, S *big.Int
+}
+
+
+*/
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////
 //								END OF MINING, START OF UTILITIES											 //
