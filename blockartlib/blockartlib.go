@@ -27,6 +27,7 @@ type ShapeType int
 const (
 	PATH ShapeType = iota
 	CIRCLE
+	STAR
 )
 
 // CanvasSettings contain settings for a canvas in BlockArt.

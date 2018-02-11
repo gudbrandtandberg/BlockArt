@@ -1,7 +1,7 @@
 # BlockArt
 Project 1 for CPSC416 Distributed Systems, UBC February 2018
 
-This document explains how we have implemented the BlockArt project, which is specified at [http://www.cs.ubc.ca/~bestchai/teaching/cs416_2017w2/project1/index.html]
+This document explains how we have implemented the BlockArt project, which is specified at http://www.cs.ubc.ca/~bestchai/teaching/cs416_2017w2/project1/index.html
 
 ## Overview
 
