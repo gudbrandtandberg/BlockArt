@@ -204,7 +204,7 @@ func (m2m *MinerToMiner) HeartbeatNeighbours() (err error) {
 		//give neighbours time to respond
 		time.Sleep(2 * time.Second)
 		//if we have good neighbours, return
-		fmt.Println(len(ink.neighbours), ink.settings.MinNumMinerConnections, ink.neighbours)
+		fmt.Println("len neighbours, minminers, neighbours: ", len(ink.neighbours), ink.settings.MinNumMinerConnections, ink.neighbours)
 		if len(ink.neighbours) >= int(ink.settings.MinNumMinerConnections) {
 			return
 		}
@@ -248,7 +248,7 @@ func (m2m *MinerToMiner) ReceiveBlock(block *Block, reply *bool) (err error) {
 			maplock.Unlock()
 			fmt.Println("unlocked13")
 			for _, k := range hashes {
-				fmt.Println(k, ink.ValidationCount(k), ink.Length(k))
+				fmt.Println("k, validationcount, length(k): ", k, ink.ValidationCount(k), ink.Length(k))
 			}
 		} else {
 			//			log.Println("tsk tsk Received block does not append to a head")
@@ -299,7 +299,7 @@ type CanvasSettings struct {
 
 // Register makes RPC Register(localAddr, pubKey) call, and registers settings returned for canvas or returns error
 func (m2s *MinerToServer) Register() (err error) {
-	fmt.Println(ink.localAddr)
+	fmt.Println("localaddr: ", ink.localAddr)
 	m := &MinerInfo{
 		Address: ink.localAddr,
 		Key:     ink.key.PublicKey,
@@ -319,7 +319,7 @@ func (m2s *MinerToServer) Register() (err error) {
 func (m2s *MinerToServer) GetNodes() (err error) {
 	minerAddresses := make([]net.Addr, 0)
 	err = ink.serverClient.Call("RServer.GetNodes", ink.key.PublicKey, &minerAddresses)
-	fmt.Println(minerAddresses)
+	fmt.Println("mineraddrs: ", minerAddresses)
 	for _, addr := range minerAddresses {
 		_, ok := ink.neighbours[addr.String()]
 		if !ok {
@@ -585,9 +585,7 @@ func main() {
 		MinedBy:  ecdsa.PublicKey{},
 	}
 
-	// For now: write key to file
-	keyString, _ := encodeKey(*priv)
-	ioutil.WriteFile("./keys/key.txt", []byte(keyString), 0666)
+	writeMinerAddrKeyToFile(ink.localAddr.String(), &ink.key)
 
 	go func() {
 		for {
@@ -601,7 +599,8 @@ func main() {
 	go func() {
 		for {
 			miner2server.HeartbeatServer()
-			time.Sleep(time.Millisecond * 50)
+			//fmt.Println("len of new block: ", len(newBlockCH))
+			time.Sleep(time.Millisecond * 5)
 		}
 	}()
 	miner2miner.HeartbeatNeighbours()
@@ -635,8 +634,7 @@ func (m *RMiner) OpenCanvas(keyHash [16]byte, reply *CanvasSettings) error {
 }
 
 func (m *RMiner) RecordDeleteOp(op Operation, reply *string) error {
-	fmt.Println("Will delete:")
-	fmt.Println(op.SVG)
+	fmt.Println("Will delete: ", op.SVG)
 
 	if !ecdsa.Verify(&ink.key.PublicKey, op.SVGHash.Hash, op.SVGHash.R, op.SVGHash.S) {
 		return errors.New("Invalid signature")
@@ -652,7 +650,7 @@ func (m *RMiner) RecordAddOp(op Operation, reply *string) error {
 		return errors.New("Invalid signature")
 	}
 
-	fmt.Println(op.SVG)
+	fmt.Println("recorded: ", op.SVG)
 	return nil
 }
 
@@ -702,8 +700,14 @@ func encodeKey(key ecdsa.PrivateKey) (string, error) {
 	return keyString, nil
 }
 
+func writeMinerAddrKeyToFile(addr string, key *ecdsa.PrivateKey) {
+	keyString, _ := encodeKey(*key)
+	filename := "./keys/" + addr
+	ioutil.WriteFile("./keys/", []byte(keyString), 0666)
+}
+
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////
-//								END OF METHODS, START OF VALIDATION										 	 //
+//								END OF ART2MINER, START OF VALIDATION										 	 //
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 func block2hash(block *Block) string {
