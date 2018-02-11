@@ -10,7 +10,8 @@ go run ink-miner.go [server ip:port] [pubKey] [privKey]
 package main
 
 import (
-	"math/big"
+	//"./blockartlib"
+	"bytes"
 	"crypto/ecdsa"
 	"crypto/elliptic"
 	"crypto/md5"
@@ -22,6 +23,7 @@ import (
 	"fmt"
 	"log"
 	"math"
+	"math/big"
 	"net"
 	"net/rpc"
 	"strconv"
@@ -72,14 +74,13 @@ type MinerToServerInterface interface {
 type MinerFromANodeInterface interface {
 	GetGenesisBlock(input string, hash *string) (err error)
 	GetChildren(hash string, childrenHashes *[]string) (err error)
-
 }
 
 type IMinerInterface interface {
 	// or []byte ??
 
 	// Just a disconnected error? other errors will be handled by methods called within mine
-
+	GetLongestChain() (Block, error)
 	Mine() error
 }
 
@@ -95,9 +96,9 @@ type BlockChainInterface interface {
 //								END OF INTERFACES, START OF STRUCTS											 //
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-type MinerToMiner struct {}
-type MinerToServer struct {}
-type MinerFromANode struct {}
+type MinerToMiner struct{}
+type MinerToServer struct{}
+type MinerFromANode struct{}
 type IMiner struct {
 	serverClient *rpc.Client
 	localAddr    net.Addr
@@ -112,19 +113,19 @@ type IMiner struct {
 }
 
 type Operation struct {
-	Svg string
-	SvgHash SVGHash
-	Owner ecdsa.PublicKey
+	Delete  bool
+	SVG     string
+	SVGHash SVGHash
+	Owner   ecdsa.PublicKey
 }
 
 type SVGHash struct {
 	Hash []byte
-	R *big.Int
-	S *big.Int
+	R, S *big.Int
 }
 
 type BlockNode struct {
-	Block Block
+	Block    Block
 	Children []BlockNode
 }
 
@@ -145,6 +146,7 @@ func (art MinerFromANode) GetGenesisBlock(input string, hash *string) (err error
 }
 
 type InvalidBlockHashError string
+
 func (e InvalidBlockHashError) Error() string {
 	return fmt.Sprintf("BlockArt: Invalid block hash [%s]", string(e))
 }
@@ -325,6 +327,10 @@ func (m2s *MinerToServer) HeartbeatServer() (err error) {
 	return
 }
 
+func (ink IMiner) GetLongestChain() (block *Block, err error) {
+	return block, err
+}
+
 func (ink IMiner) Mine() (err error) {
 	var i uint64 = 0
 	opQueue := make([]Operation, 0)
@@ -332,13 +338,13 @@ func (ink IMiner) Mine() (err error) {
 
 	var currentBlock Block
 
-/*
-type Operation struct {
-	Svg string
-	SvgHash SVGHash
-	Owner ecdsa.PublicKey
-}
-*/
+	/*
+	   type Operation struct {
+	   	Svg string
+	   	SvgHash SVGHash
+	   	Owner ecdsa.PublicKey
+	   }
+	*/
 	go func() {
 		for {
 			select {
@@ -418,15 +424,6 @@ func tmp() net.Addr {
 	return l.Addr()
 }
 
-func killFriends() {
-	for addr, miner := range ink.neighbours {
-		err := miner.Call("MinerToMiner.ListenHB", "", nil)
-		if err != nil {
-			delete(ink.neighbours, addr)
-		}
-	}
-}
-
 func main() {
 	gob.Register(&net.TCPAddr{})
 	gob.Register(&elliptic.CurveParams{})
@@ -465,7 +462,7 @@ func main() {
 
 	go func() {
 		for {
-			minedBlock := <- foundBlockCH
+			minedBlock := <-foundBlockCH
 			miner2miner.FloodToPeers(&minedBlock)
 		}
 	}()
@@ -494,7 +491,7 @@ func main() {
 }
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////
-//								END OF METHODS, START OF MINING											 //
+//								END OF METHODS, START OF VALIDATION										 	 //
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 func block2hash(block *Block) string {
@@ -512,30 +509,133 @@ func block2string(block *Block) string {
 	return string(res1B)
 }
 
-
 /*
 Block validations:
 	Check that the nonce for the block is valid: PoW is correct and has the right difficulty.
 	Check that each operation in the block has a valid signature (this signature should be generated using the private key and the operation).
 	Check that the previous block hash points to a legal, previously generated, block.
-Operation validations:
-	Check that each operation has sufficient ink associated with the public key that generated the operation.
-	Check that each operation does not violate the shape intersection policy described above.
-	Check that the operation with an identical signature has not been previously added to the blockchain (prevents operation replay attacks).
-	Check that an operation that deletes a shape refers to a shape that exists and which has not been previously deleted.
 */
 func validateBlock(block *Block, difficulty uint8) bool {
 	validNonce := validateNonce(block, difficulty)
-	validOps := validaateOps(block)	
+	validOps := validateOps(block)
 	validPrevHash := validatePrevHash(block)
+
+	return (validNonce && validOps && validPrevHash)
 }
 
 func validateNonce(block *Block, difficulty uint8) bool {
 	return strings.HasSuffix(block2hash(block), strings.Repeat("0", int(difficulty)))
 }
 
+func validatePrevHash(block *Block) bool {
+	_, ok := blocks[block.PrevHash]
+	if ok {
+		return true
+	}
+	return false
+}
+
 /*
-	Ops      []Operation
+Ops      []Operation
+
+type Operation struct {
+	Svg string
+	SvgHash []byte
+	Owner ecdsa.PublicKey
+}
+
+Operation validations:
+	Check that each operation has sufficient ink associated with the public key that generated the operation.
+	Check that each operation does not violate the shape intersection policy described above.
+	Check that the operation with an identical signature has not been previously added to the blockchain (prevents operation replay attacks).
+	Check that an operation that deletes a shape refers to a shape that exists and which has not been previously deleted.
+*/
+func validateOps(block *Block) bool {
+	opSignatures := validateOpSigs(block)
+	intersections := validateIntersections(block)
+	identicalSignatures := validateIdenticalSigs(block)
+	validDelete := validateDelete(block)
+
+	return (opSignatures && intersections && identicalSignatures && validDelete)
+}
+
+//Returns true if all ops are correctly signed
+func validateOpSigs(block *Block) bool {
+	allTrue := true
+	for _, op := range block.Ops {
+		if !ecdsa.Verify(&op.Owner, op.SVGHash.Hash, op.SVGHash.R, op.SVGHash.S) {
+			allTrue = false
+		}
+	}
+	return allTrue
+}
+
+//Returns true if there are -NOT- any intersections with any shapes already in blockchain
+func validateIntersections(block *Block) bool {
+	return true
+}
+
+//Returns true if there is -NOT- an identical op/opsig in blockchain
+func validateIdenticalSigs(block *Block) bool {
+	noIdenticalOps := true
+	var toCheck []Operation
+	var theBlocks []Block
+	for _, op := range block.Ops {
+		//if there is same op/sig in blockchain, add it to a list to check for deletes
+		for _, b := range blocks {
+			for _, o := range b.Ops {
+				if bytes.Equal(o.SVGHash.Hash, op.SVGHash.Hash) {
+					toCheck = append(toCheck, op)
+					theBlocks = append(theBlocks, b)
+				}
+			}
+		}
+	}
+	if len(toCheck) > 0 {
+		noIdenticalOps = checkDeletes(toCheck, theBlocks)
+	}
+	return noIdenticalOps
+}
+
+//for each op, check if it is deleted in a later block. If it is, return true
+func checkDeletes(ops []Operation, blox []Block) bool {
+	tipOfChain, err := ink.GetLongestChain()
+	checkError(err)
+
+iLoop:
+	for i := 0; i < len(ops); i++ {
+		thisOp := ops[i]
+		thisBlock := blox[i]
+		currBlock := tipOfChain
+		//iterate back until thisBlock[i] is hit; if it also doesn't have delete then return false
+		for currBlock.PrevHash != thisBlock.PrevHash {
+			for _, currOp := range currBlock.Ops {
+				if currOp.Delete {
+					if bytes.Equal(currOp.SVGHash.Hash, thisOp.SVGHash.Hash) {
+						break iLoop
+					}
+				}
+			}
+			*currBlock = blocks[currBlock.PrevHash]
+		}
+		finalBlock := blocks[currBlock.PrevHash]
+		for _, currOp := range finalBlock.Ops {
+			if currOp.Delete {
+				if bytes.Equal(currOp.SVGHash.Hash, thisOp.SVGHash.Hash) {
+					break iLoop
+				}
+			}
+		}
+
+		return false
+	}
+
+	return true
+
+}
+
+/*
+Ops      []Operation
 
 type Operation struct {
 	Svg string
@@ -544,16 +644,16 @@ type Operation struct {
 }
 */
 
+//Returns true if shape is in blockchain and not previously deleted and is a delete
+func validateDelete(block *Block) bool {
+	allPossible := true
+	for _, op := range block.Ops {
+		if op.Delete {
+			//if it's a delete, handle it, if it's not a delete ignore
 
-func validateOps(block *Block) bool {
-	for _,op := range block.Ops {
-		Verify(op.Owner, op.SvgHash.Hash, op.SvgHash.R, op.SvgHash.S)
+		}
 	}
-	return true
-}
-
-func validatePrevHash(block *Block) bool {
-	return true
+	return allPossible
 }
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////
