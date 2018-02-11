@@ -703,7 +703,7 @@ func encodeKey(key ecdsa.PrivateKey) (string, error) {
 func writeMinerAddrKeyToFile(addr string, key *ecdsa.PrivateKey) {
 	keyString, _ := encodeKey(*key)
 	filename := "./keys/" + addr
-	ioutil.WriteFile("./keys/", []byte(keyString), 0666)
+	ioutil.WriteFile(filename, []byte(keyString), 0666)
 }
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////
