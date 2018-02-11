@@ -32,6 +32,7 @@ import (
 	"strings"
 	"sync"
 	"time"
+	"testing/quick"
 )
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -367,10 +368,42 @@ func (ink IMiner) GetBlockChain() (err error) {
 	return
 }
 
+func (ink IMiner) ProcessNewBlock(b *Block, currentBlock *Block, opQueue *[]Operation) {
+	fmt.Println("locking10")
+	maplock.Lock()
+	fmt.Println("locked10")
+	blocks[block2hash(b)] = *b
+	fmt.Println("unlocking10")
+	maplock.Unlock()
+	fmt.Println("unlocked10")
+	currentBlock = &Block{
+		PrevHash: block2hash(b),
+		MinedBy:  ink.key.PublicKey,
+		Ops:      append(currentBlock.Ops, *opQueue...),
+	}
+}
+
+func (ink IMiner) ProcessMinedBlock(currentBlock *Block, opQueue *[]Operation) {
+	log.Printf("found nonce: %s", currentBlock.Nonce)
+	prevHash := block2hash(currentBlock)
+	fmt.Println("locking")
+	maplock.Lock()
+	fmt.Println("locked")
+	blocks[prevHash] = *currentBlock
+	fmt.Println("unlocking")
+	maplock.Unlock()
+	fmt.Println("unlocked")
+	foundBlockCH <- *currentBlock // spit out the found block via channel
+	currentBlock = &Block{
+		PrevHash: prevHash,
+		MinedBy:  ink.key.PublicKey,
+		Ops:      *opQueue,
+	}
+}
+
 func (ink IMiner) Mine() (err error) {
 	var i uint64 = 0
 	opQueue := make([]Operation, 0)
-	difficulty := ink.settings.PoWDifficultyNoOpBlock
 
 	var currentBlock Block
 
@@ -378,23 +411,8 @@ func (ink IMiner) Mine() (err error) {
 		for {
 			select {
 			case b := <-newBlockCH:
-				fmt.Println("locking10")
-				maplock.Lock()
-				fmt.Println("locked10")
-				blocks[block2hash(&b)] = b
-				fmt.Println("unlocking10")
-				maplock.Unlock()
-				fmt.Println("unlocked10")
-				currentBlock = Block{
-					PrevHash: block2hash(&b),
-					MinedBy:  ink.key.PublicKey,
-					Ops:      append(currentBlock.Ops, opQueue...),
-				}
+				ink.ProcessNewBlock(&b, &currentBlock, &opQueue)
 				opQueue = make([]Operation, 0)
-				difficulty = ink.settings.PoWDifficultyNoOpBlock
-				if len(currentBlock.Ops) != 0 {
-					difficulty = ink.settings.PoWDifficultyOpBlock
-				}
 				i = 0
 
 			case o := <-newOpsCH:
@@ -402,28 +420,13 @@ func (ink IMiner) Mine() (err error) {
 
 			default:
 				i++
-
+				difficulty := ink.settings.PoWDifficultyNoOpBlock
+				if len(currentBlock.Ops) != 0 {
+					difficulty = ink.settings.PoWDifficultyOpBlock
+				}
 				currentBlock.Nonce = strconv.FormatUint(i, 10)
 				if validateBlock(&currentBlock, difficulty) {
-					// successfully found nonce
-					log.Printf("found nonce: %s", currentBlock.Nonce)
-					prevHash := block2hash(&currentBlock)
-					//log.Printf("block hash: %s", prevHash)
-					fmt.Println("locking")
-					maplock.Lock()
-					fmt.Println("locked")
-					blocks[prevHash] = currentBlock
-					fmt.Println("unlocking")
-					maplock.Unlock()
-					fmt.Println("unlocked")
-					foundBlockCH <- currentBlock // spit out the found block via channel
-					//log.Println("difficulty: ", ink.settings)
-					//					newBlockCH <- currentBlock // spit out the found block via channel
-					currentBlock = Block{
-						PrevHash: prevHash,
-						MinedBy:  ink.key.PublicKey,
-						Ops:      opQueue,
-					}
+					ink.ProcessMinedBlock(&currentBlock, &opQueue)
 					opQueue = make([]Operation, 0)
 					i = 0
 				}
@@ -530,7 +533,7 @@ var foundBlockCH (chan Block)
 
 var maplock sync.RWMutex
 
-func tmp() net.Addr {
+func listenForMinerToMinerRPC() net.Addr {
 	server := rpc.NewServer()
 	server.Register(&MinerToMiner{})
 
@@ -546,7 +549,7 @@ func tmp() net.Addr {
 	return l.Addr()
 }
 
-func main() {
+func registerGobAndCreateChannels() {
 	gob.Register(&net.TCPAddr{})
 	gob.Register(&elliptic.CurveParams{})
 	gob.Register(&MinerInfo{})
@@ -557,62 +560,84 @@ func main() {
 	newOpsCH = make(chan Operation, 255)
 	newBlockCH = make(chan Block, 255)
 	foundBlockCH = make(chan Block, 255)
+}
+
+func openRPCToServer() (client *rpc.Client, err error) {
+	ipPort := flag.String("i", "127.0.0.1:12345", "RPC server ip:port")
+	return rpc.Dial("tcp", *ipPort)
+}
+
+func getGenesisBlock() (Block) {
+	return Block{
+		PrevHash: "foobar",
+		Nonce:    "1337",
+		MinedBy:  ecdsa.PublicKey{},
+	}
+}
+
+func main() {
+	registerGobAndCreateChannels()
+	server, err := openRPCToServer()
+	checkError(err)
 
 	priv, err := ecdsa.GenerateKey(elliptic.P384(), rand.Reader)
 	if err != nil {
 		fmt.Println(err)
 	}
 
-	ipPort := flag.String("i", "127.0.0.1:12345", "RPC server ip:port")
-	client, err := rpc.Dial("tcp", *ipPort)
-
-	l := tmp()
 	ink = IMiner{
-		serverClient: client,
+		serverClient: server,
 		key:          *priv,
-		localAddr:    l,
+		localAddr:    listenForMinerToMinerRPC(),
 		neighbours:   make(map[string]*rpc.Client),
 	}
 
 	// Register with server
 	miner2server.Register()
-	err = miner2server.GetNodes()
-	err = ink.GetBlockChain()
-
-	genesisBlock := Block{
-		PrevHash: "foobar",
-		Nonce:    "1337",
-		MinedBy:  ecdsa.PublicKey{},
-	}
+	checkError(miner2server.GetNodes())
+	checkError(ink.GetBlockChain())
 
 	// For now: write key to file
 	keyString, _ := encodeKey(*priv)
 	ioutil.WriteFile("./keys/key.txt", []byte(keyString), 0666)
 
+	// Starts the flood routine that floods new blocks
+	startFloodListener()
+
+	// Heartbeat server
+	heartbeatTheServer()
+
+	// Start mining
+	checkError(ink.Mine())
+
+	// Feed genesisblock as the first one if no blockchain exists
+	if len(blocks) == 0 {
+		newBlockCH <- getGenesisBlock()
+	}
+
+	// Listen incoming RPC calls from artnodes
+	listenForArtNodes()
+
+	// Heartbeat your neighbours s.t. you know when you get some.
+	checkError(miner2miner.HeartbeatNeighbours())
+}
+
+func startFloodListener() {
 	go func() {
 		for {
 			minedBlock := <-foundBlockCH
 			miner2miner.FloodToPeers(&minedBlock)
 		}
 	}()
-	fmt.Println(err, ink.neighbours)
+}
 
-	// Heartbeat server
+func heartbeatTheServer() {
 	go func() {
 		for {
 			miner2server.HeartbeatServer()
-			//fmt.Println("len of new block: ", len(newBlockCH))
 			time.Sleep(time.Millisecond * 5)
 		}
 	}()
-	miner2miner.HeartbeatNeighbours()
-	checkError(err)
-
-	err = ink.Mine()
-	newBlockCH <- genesisBlock
-
-	// Listen incoming RPC calls from artnodes
-	listenForArtNodes()
 }
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -874,8 +899,10 @@ func validateDelete(block *Block) bool {
 //								END OF MINING, START OF UTILITIES											 //
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-func checkError(err error) {
+func checkError(err error) bool {
 	if err != nil {
 		fmt.Println("ERROR:", err)
+		return true
 	}
+	return false
 }
