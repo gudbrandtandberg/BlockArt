@@ -10,6 +10,7 @@ go run ink-miner.go [server ip:port] [pubKey] [privKey]
 package main
 
 import (
+	"math/big"
 	"crypto/ecdsa"
 	"crypto/elliptic"
 	"crypto/md5"
@@ -34,11 +35,11 @@ import (
 
 type MinerToMinerInterface interface {
 	ConnectToNeighbour() error
-	FloodToPeers() error
+	FloodToPeers(block *Block) error
 	HeartbeatNeighbours() error
 	GetHeartbeats() error
 	RegisterNeighbour() error
-	ReceiveAndFlood() error
+	ReceiveBlock(block *Block, reply *bool) (err error)
 }
 
 ////// TCP RPC calls to make against server
@@ -68,7 +69,11 @@ type MinerToServerInterface interface {
 	HeartbeatServer() error
 }
 
-type MinerFromANodeInterface interface{}
+type MinerFromANodeInterface interface {
+	GetGenesisBlock(input string, hash *string) (err error)
+	GetChildren(hash string, childrenHashes *[]string) (err error)
+
+}
 
 type IMinerInterface interface {
 	// or []byte ??
@@ -90,12 +95,13 @@ type BlockChainInterface interface {
 //								END OF INTERFACES, START OF STRUCTS											 //
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-type MinerToMiner struct{}
-type MinerToServer struct{}
+type MinerToMiner struct {}
+type MinerToServer struct {}
+type MinerFromANode struct {}
 type IMiner struct {
 	serverClient *rpc.Client
 	localAddr    net.Addr
-	neighbours   map[net.Addr]*rpc.Client
+	neighbours   map[string]*rpc.Client
 
 	settings MinerNetSettings
 
@@ -106,8 +112,20 @@ type IMiner struct {
 }
 
 type Operation struct {
-	svg   string
-	owner ecdsa.PublicKey
+	Svg string
+	SvgHash SVGHash
+	Owner ecdsa.PublicKey
+}
+
+type SVGHash struct {
+	Hash []byte
+	R *big.Int
+	S *big.Int
+}
+
+type BlockNode struct {
+	Block Block
+	Children []BlockNode
 }
 
 type Block struct {
@@ -117,23 +135,49 @@ type Block struct {
 	Nonce    string
 }
 
-/*
-type BlockNode struct {
-	Block Block
-	Children []BlockNode
-	Parent BlockNode
-}
-*/
-
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////
 //								END OF STRUCTS, START OF METHODS											 //
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+func (art MinerFromANode) GetGenesisBlock(input string, hash *string) (err error) {
+	*hash = ink.settings.GenesisBlockHash
+	return
+}
+
+type InvalidBlockHashError string
+func (e InvalidBlockHashError) Error() string {
+	return fmt.Sprintf("BlockArt: Invalid block hash [%s]", string(e))
+}
+
+func (art MinerFromANode) GetChildren(hash string, childrenHashes *[]string) (err error) {
+	nodesToCheck := make([]BlockNode, 0, math.MaxUint32)
+	nodesToCheck = append(nodesToCheck, genesisNode)
+	for len(nodesToCheck) > 0 {
+		var node BlockNode = nodesToCheck[0]
+		if block2hash(&node.Block) == hash {
+			*childrenHashes = make([]string, 0, len(node.Children))
+			for _, child := range node.Children {
+				*childrenHashes = append(*childrenHashes, block2hash(&child.Block))
+			}
+			return
+		}
+		nodesToCheck = append(nodesToCheck, node.Children...)
+	}
+	return InvalidBlockHashError(hash)
+}
 
 func (m2m *MinerToMiner) ConnectToNeighbour() (err error) {
 	return
 }
 
-func (m2m *MinerToMiner) FloodToPeers() (err error) {
+func (m2m *MinerToMiner) FloodToPeers(block *Block) (err error) {
+	fmt.Println("Sent", block.Nonce, block2hash(block))
+
+	for _, neighbour := range ink.neighbours {
+		var reply bool
+		err = neighbour.Call("MinerToMiner.ReceiveBlock", &block, &reply)
+		fmt.Println(err, reply)
+	}
 	return
 }
 
@@ -162,24 +206,38 @@ func (m2m *MinerToMiner) HeartbeatNeighbours() (err error) {
 		//give neighbours time to respond
 		time.Sleep(2 * time.Second)
 		//if we have good neighbours, return
+		fmt.Println(len(ink.neighbours), ink.settings.MinNumMinerConnections, ink.neighbours)
 		if len(ink.neighbours) >= int(ink.settings.MinNumMinerConnections) {
 			return
 		}
 		//else we get more neighbours
 		err = miner2server.GetNodes()
 		checkError(err)
-		go m2m.HeartbeatNeighbours()
-		checkError(err)
-
 	}
-
-	return
 }
 
 func (m2m *MinerToMiner) RegisterNeighbour() (err error) {
 	return
 }
-func (m2m *MinerToMiner) ReceiveAndFlood() (err error) {
+
+func (m2m *MinerToMiner) ReceiveBlock(block *Block, reply *bool) (err error) {
+	fmt.Println("Received", block.Nonce, block2hash(block))
+
+	difficulty := ink.settings.PoWDifficultyNoOpBlock
+	if len(block.Ops) != 0 {
+		difficulty = ink.settings.PoWDifficultyOpBlock
+	}
+	if validateBlock(block, difficulty) {
+		fmt.Println("trying to validate")
+		for _, head := range ink.getBlockChainHeads() {
+			if block2hash(&head.Block) == block.PrevHash {
+				fmt.Println("validated")
+				newBlockCH <- *block
+			} else {
+				log.Println("tsk tsk Received block does not append to a head")
+			}
+		}
+	}
 	return
 }
 
@@ -239,13 +297,18 @@ func (m2s *MinerToServer) Register() (err error) {
 
 // Makes RPC GetNodes(pubKey) call, makes a call to ConnectToNeighbour for each returned addr, can return errors
 func (m2s *MinerToServer) GetNodes() (err error) {
-	minerAddresses := make([]net.Addr, 0, math.MaxUint16)
+	minerAddresses := make([]net.Addr, 0)
 	err = ink.serverClient.Call("RServer.GetNodes", ink.key.PublicKey, &minerAddresses)
-
+	fmt.Println(minerAddresses)
 	for _, addr := range minerAddresses {
-		client, err := rpc.Dial("tcp", addr.String())
-		if err == nil {
-			ink.neighbours[addr] = client
+		_, ok := ink.neighbours[addr.String()]
+		if !ok {
+			client, err := rpc.Dial("tcp", addr.String())
+			if err == nil {
+				ink.neighbours[addr.String()] = client
+			} else {
+				fmt.Println(err)
+			}
 		}
 	}
 	return
@@ -263,23 +326,68 @@ func (m2s *MinerToServer) HeartbeatServer() (err error) {
 }
 
 func (ink IMiner) Mine() (err error) {
-	var i uint64
-	ink.currentBlock.Ops = bufferedOps // TODO: will this break everything?
+	var i uint64 = 0
+	opQueue := make([]Operation, 0)
+	difficulty := ink.settings.PoWDifficultyNoOpBlock
 
-	for i = 0; i < math.MaxUint64; i++ {
-		nonce := strconv.FormatUint(i, 10)
-		difficulty := ink.settings.PoWDifficultyNoOpBlock
-		if len(ink.currentBlock.Ops) != 0 {
-			difficulty = ink.settings.PoWDifficultyOpBlock
+	var currentBlock Block
+
+/*
+type Operation struct {
+	Svg string
+	SvgHash SVGHash
+	Owner ecdsa.PublicKey
+}
+*/
+	go func() {
+		for {
+			select {
+			case b := <-newBlockCH:
+				currentBlock = Block{
+					PrevHash: block2hash(&b),
+					MinedBy:  ink.key.PublicKey,
+					Ops:      append(currentBlock.Ops, opQueue...),
+				}
+				opQueue = make([]Operation, 0)
+				difficulty = ink.settings.PoWDifficultyNoOpBlock
+				if len(currentBlock.Ops) != 0 {
+					difficulty = ink.settings.PoWDifficultyOpBlock
+				}
+				i = 0
+
+			case o := <-newOpsCH:
+				opQueue = append(opQueue, o)
+
+			default:
+				i++
+				currentBlock.Nonce = strconv.FormatUint(i, 10)
+				if validateBlock(&currentBlock, difficulty) {
+					// successfully found nonce
+					log.Printf("found nonce: %s", currentBlock.Nonce)
+					foundBlockCH <- currentBlock // spit out the found block via channel
+					currentBlock = Block{PrevHash: block2hash(&currentBlock), MinedBy: ink.key.PublicKey}
+					i = 0
+				}
+			}
 		}
-		if validateNonce(ink.currentBlock, nonce, difficulty) {
-			// Broadcast nonce
-			log.Println(nonce)
-			ink.Mine() // Burn the CPU
+	}()
+	return nil
+}
+
+func (ink IMiner) getBlockChainHeads() (heads []BlockNode) {
+	heads = make([]BlockNode, 0)
+	nodesToCheck := make([]BlockNode, 0)
+	nodesToCheck = append(nodesToCheck, genesisNode)
+	for len(nodesToCheck) > 0 {
+		var node BlockNode = nodesToCheck[0]
+		nodesToCheck = nodesToCheck[1:]
+		if len(node.Children) == 0 {
+			heads = append(heads, node)
+		} else {
+			nodesToCheck = append(nodesToCheck, node.Children...)
 		}
 	}
-	log.Println("This should not happen")
-	return nil
+	return
 }
 
 var ink IMiner
@@ -288,8 +396,15 @@ var miner2miner MinerToMiner
 var blocks map[string]Block
 var bufferedOps []Operation
 
+var newOpsCH (chan Operation)
+var newBlockCH (chan Block)
+var foundBlockCH (chan Block)
+
+var genesisNode BlockNode
+
 func tmp() net.Addr {
 	server := rpc.NewServer()
+	server.Register(&MinerToMiner{})
 
 	l, _ := net.Listen("tcp", ":0")
 
@@ -312,35 +427,14 @@ func killFriends() {
 	}
 }
 
-func getBlockWithHash(hash string) *Block {
-	block, ok := blocks[hash]
-	if !ok {
-		// Get block from neighbours
-		// block = fromneighbour()
-	}
-	return &block
-}
-
-func getChildren(block *Block) []*Block {
-	hash := block2hash(block)
-	children := make([]*Block, 0, math.MaxUint16)
-	for _, b := range ink.tails {
-		for {
-			if b.PrevHash == hash {
-				children = append(children, b)
-				break
-			} else {
-				b = getBlockWithHash(b.PrevHash)
-			}
-		}
-	}
-	return children
-}
-
 func main() {
 	gob.Register(&net.TCPAddr{})
 	gob.Register(&elliptic.CurveParams{})
 	gob.Register(&MinerInfo{})
+
+	newOpsCH = make(chan Operation)
+	newBlockCH = make(chan Block)
+	foundBlockCH = make(chan Block)
 
 	priv, err := ecdsa.GenerateKey(elliptic.P384(), rand.Reader)
 	if err != nil {
@@ -356,7 +450,7 @@ func main() {
 		serverClient: client,
 		key:          *priv,
 		localAddr:    l,
-		neighbours:   make(map[net.Addr]*rpc.Client),
+		neighbours:   make(map[string]*rpc.Client),
 	}
 
 	// Register with server
@@ -364,25 +458,39 @@ func main() {
 	err = miner2server.GetNodes()
 	checkError(err)
 
-	genesisBlock := &Block{
+	genesisBlock := Block{
 		PrevHash: ink.settings.GenesisBlockHash,
 		MinedBy:  priv.PublicKey,
 	}
-	ink.currentBlock = genesisBlock
+
+	go func() {
+		for {
+			minedBlock := <- foundBlockCH
+			miner2miner.FloodToPeers(&minedBlock)
+		}
+	}()
+	ink.currentBlock = &genesisBlock
 
 	fmt.Println(err, ink.neighbours)
 
 	// Heartbeat server
-	for {
-		go miner2server.HeartbeatServer()
-
-		//go miner2miner.HeartbeatNeighbours()
-
-		time.Sleep(time.Millisecond * 50)
-	}
+	go func() {
+		for {
+			miner2server.HeartbeatServer()
+			time.Sleep(time.Millisecond * 50)
+		}
+	}()
 	miner2miner.HeartbeatNeighbours()
 	checkError(err)
-	go ink.Mine()
+
+	err = ink.Mine()
+	newBlockCH <- genesisBlock
+
+	for {
+		time.Sleep(time.Second * 2)
+	}
+
+	//genesisNode.Children = append(genesisNode.Children, newNode)
 }
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -404,6 +512,7 @@ func block2string(block *Block) string {
 	return string(res1B)
 }
 
+
 /*
 Block validations:
 	Check that the nonce for the block is valid: PoW is correct and has the right difficulty.
@@ -415,22 +524,36 @@ Operation validations:
 	Check that the operation with an identical signature has not been previously added to the blockchain (prevents operation replay attacks).
 	Check that an operation that deletes a shape refers to a shape that exists and which has not been previously deleted.
 */
+func validateBlock(block *Block, difficulty uint8) bool {
+	validNonce := validateNonce(block, difficulty)
+	validOps := validaateOps(block)	
+	validPrevHash := validatePrevHash(block)
+}
 
-func validateBlock(block *Block, nonce string, difficulty uint8) bool {
-	
-	var validNonce bool
-	validNonce = validateNonce(block, nonce, difficulty)
-	var validOpSigs bool
-	validOpSigs = true
-	for _, op := range block.Ops {
-		
+func validateNonce(block *Block, difficulty uint8) bool {
+	return strings.HasSuffix(block2hash(block), strings.Repeat("0", int(difficulty)))
+}
+
+/*
+	Ops      []Operation
+
+type Operation struct {
+	Svg string
+	SvgHash []byte
+	Owner ecdsa.PublicKey
+}
+*/
+
+
+func validateOps(block *Block) bool {
+	for _,op := range block.Ops {
+		Verify(op.Owner, op.SvgHash.Hash, op.SvgHash.R, op.SvgHash.S)
 	}
-	
 	return true
 }
 
-func validateNonce(block *Block, nonce string, difficulty uint8) bool {
-	return strings.HasSuffix(block2hash(block), strings.Repeat("0", int(difficulty)))
+func validatePrevHash(block *Block) bool {
+	return true
 }
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////
