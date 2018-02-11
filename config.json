@@ -2,8 +2,8 @@
   "num-miner-to-return": 4,
   "rpc-ip-port": "127.0.0.1:12345",
   "miner-settings": {
-    "genesis-block-hash": "83218ac34c1834c26781fe4bde918ee4",
-    "min-num-miner-connections": 2,
+    "genesis-block-hash": "9875f0d34f788837bf02c0b30ac0a614",
+    "min-num-miner-connections": 1,
     "ink-per-op-block": 100,
     "ink-per-no-op-block": 50,
     "heartbeat": 100,
