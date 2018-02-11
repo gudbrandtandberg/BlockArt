@@ -663,7 +663,7 @@ func (p PathShape) String() string {
 	s += "  Components: " + compString + "\n"
 	s += "  Fill: " + p.fill + "\n"
 	s += "  Stroke: " + p.stroke + "\n"
-	s += "  Area: " + strconv.FormatFloat(p.Area(), 'f', -1, 64) + "\n"
+	s += "  Area: " + strconv.Itoa(int(p.Area())) + "\n"
 	s += "</Path>"
 	return s
 }
@@ -675,7 +675,7 @@ func (c CircleShape) String() string {
 	s += "  Radius: " + strconv.FormatFloat(c.r, 'f', -1, 64) + "\n"
 	s += "  Fill: " + c.fill + "\n"
 	s += "  Stroke: " + c.stroke + "\n"
-	s += "  Area: " + strconv.FormatFloat(c.Area(), 'f', -1, 64) + "\n"
+	s += "  Area: " + strconv.Itoa(int(c.Area())) + "\n"
 	s += "</Circle>"
 	return s
 }
