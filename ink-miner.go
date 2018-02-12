@@ -37,18 +37,20 @@ import (
 	"./blockartlib"
 )
 
-const debugLocks = true
+const debugLocks = false
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////
 //											START OF INTERFACES												 //
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 type MinerToMinerInterface interface {
-	FloodToPeers(block *Block) error
+	FloodBlockToPeers(block *Block) error
+	FloodOpToPeers(op Operation) error
 	HeartbeatNeighbours() error
 	GetHeartbeats() error
-	GetBlockChain() (err error)
-	FetchBlockChain(i string, blockchain *[]Block) (err error)
-	ReceiveBlock(block *Block, reply *bool) (err error)
+	GetBlockChain() error
+	FetchBlockChain(i string, blockchain *[]Block) error
+	ReceiveBlock(block *Block, reply *bool) error
+	ReceiveOp(op Operation, reply *bool) error
 }
 
 ////// TCP RPC calls to make against server
@@ -158,7 +160,7 @@ func (art MinerFromANode) GetChildren(hash string, childrenHashes *[]string) (er
 	return // TODO: ERROR
 }
 
-func (m2m *MinerToMiner) FloodToPeers(block *Block) (err error) {
+func (m2m *MinerToMiner) FloodBlockToPeers(block *Block) (err error) {
 	fmt.Println("Sent", block.Nonce, block2hash(block), len(ink.neighbours))
 //	fmt.Println(block.PrevHash, block.Nonce, block.Ops, block.MinedBy)
 	m2m.HeartbeatNeighbours()
@@ -169,6 +171,24 @@ func (m2m *MinerToMiner) FloodToPeers(block *Block) (err error) {
 	for _, neighbour := range ink.neighbours {
 		var reply bool
 		go checkError(neighbour.Call("MinerToMiner.ReceiveBlock", &block, &reply))
+	}
+	if debugLocks { log.Println("neighbourlock1 unlocking") }
+	neighbourlock.Unlock()
+	if debugLocks { log.Println("neighbourlock1 unlocked") }
+	return
+}
+
+func (m2m *MinerToMiner) FloodOpToPeers(op Operation) (err error) {
+	fmt.Println("Sent", op.SVG, op.SVGHash.Hash, len(ink.neighbours))
+//	fmt.Println(block.PrevHash, block.Nonce, block.Ops, block.MinedBy)
+	m2m.HeartbeatNeighbours()
+
+	if debugLocks { log.Println("neighbourlock1 locking") }
+	neighbourlock.Lock()
+	if debugLocks { log.Println("neighbourlock1 locked") }
+	for _, neighbour := range ink.neighbours {
+		var reply bool
+		go checkError(neighbour.Call("MinerToMiner.ReceiveOp", &op, &reply))
 	}
 	if debugLocks { log.Println("neighbourlock1 unlocking") }
 	neighbourlock.Unlock()
@@ -327,7 +347,7 @@ func (m2m *MinerToMiner) ReceiveBlock(block *Block, reply *bool) (err error) {
 
 			// reflood block
 			foundBlockCH <- remoteBlock
-			//miner2miner.FloodToPeers(&remoteBlock)
+			//miner2miner.FloodBlockToPeers(&remoteBlock)
 			/*
 			for _, k := range hashes {
 				fmt.Println("k, validationcount, length(k): ", k, ink.ValidationCount(k), ink.Length(k))
@@ -340,6 +360,16 @@ func (m2m *MinerToMiner) ReceiveBlock(block *Block, reply *bool) (err error) {
 		//		fmt.Println("Not valid", block.PrevHash, block2hash(block))
 	}
 	return
+}
+
+func (m2m *MinerToMiner) ReceiveOp(op Operation, reply *bool) (err error) {
+
+	//TODO
+	newOpCH <- op
+	//does not have to put into tovalidate as we only keep track of our own
+	return nil
+	//does what receiveBlock does for ops
+
 }
 
 type MinerInfo struct {
@@ -481,6 +511,13 @@ func (ink IMiner) ProcessNewBlock(b *Block, currentBlock *Block, opQueue []Opera
 	}
 }
 
+func (ink IMiner) ProcessNewOp(op Operation, currentBlock *Block, opQueue []Operation) {
+	//TODO
+
+	//Mirrors processNewBlock.
+	//This is how the miner actually handles the new op when it is handed it through a channel by an RPC call from art node OR a flood from neighbour
+}
+
 func (ink IMiner) ProcessMinedBlock(currentBlock *Block, opQueue []Operation) {
 	prevHash := block2hash(currentBlock)
 	log.Printf("found nonce = %s with hash = %s", currentBlock.Nonce, prevHash)
@@ -519,8 +556,10 @@ func (ink IMiner) Mine() (err error) {
 				opQueue = make([]Operation, 0)
 				i = 0
 
-			case o := <-newOpsCH:
+			case o := <-newOpCH:
 				opQueue = append(opQueue, o)
+				//TODO: handle/verify op here,
+				ink.ProcessNewOp(o, &currentBlock, opQueue)
 
 			default:
 				i++
@@ -652,9 +691,10 @@ var miner2miner MinerToMiner
 
 var blocks map[string]Block
 
-var newOpsCH (chan Operation)
+var newOpCH (chan Operation)
 var newBlockCH (chan Block)
 var foundBlockCH (chan Block)
+var foundOpCH (chan Operation)
 var validatedOpsCH (chan Operation)
 var toValidateOpsCH (chan Operation)
 
@@ -688,11 +728,14 @@ func registerGobAndCreateChannels() {
 
 	blocks = make(map[string]Block)
 
-	newOpsCH = make(chan Operation, 255)
+	newOpCH = make(chan Operation, 255)
+	// big enough to handle one op from each miner
+	foundOpCH = make(chan Operation, 65535)
 	newBlockCH = make(chan Block, 255)
 	foundBlockCH = make(chan Block, 255)
 	validatedOpsCH = make(chan Operation, 255)
 	toValidateOpsCH = make(chan Operation, 255)
+
 }
 
 func openRPCToServer() (client *rpc.Client, err error) {
@@ -757,6 +800,7 @@ func main() {
 	for _ = range c {
 		dumpBlockchain()
 		clearMinerKeyFile()
+		time.Sleep(time.Second*3)
 		os.Exit(0)
 	} // This is blocking. Do not add anything after this.
 }
@@ -765,7 +809,7 @@ func startFloodListener() {
 	go func() {
 		for {
 			minedBlock := <-foundBlockCH
-			miner2miner.FloodToPeers(&minedBlock)
+			miner2miner.FloodBlockToPeers(&minedBlock)
 		}
 	}()
 }
@@ -803,7 +847,7 @@ func (m *RMiner) ReceiveNewOp(op Operation, reply *string) error {
 	if !ecdsa.Verify(&ink.key.PublicKey, op.SVGHash.Hash, op.SVGHash.R, op.SVGHash.S) {
 		return errors.New("Invalid signature")
 	}
-	newOpsCH <- op
+	newOpCH <- op
 	toValidateOpsCH <- op
 	for {
 		validatedOp := <- validatedOpsCH
@@ -1055,7 +1099,6 @@ func validateOpSigs(block *Block) bool {
 	return allTrue
 }
 
-// TODO
 //Returns true if there are -NOT- any intersections with any shapes already in blockchain
 func validateIntersections(block *Block) bool {
 	noIntersections := true
@@ -1143,7 +1186,7 @@ iLoop:
 
 }
 
-//TODO
+
 //Returns true if shape is in blockchain and not previously deleted and is a delete
 func validateDelete(block *Block) bool {
 	allPossible := true
