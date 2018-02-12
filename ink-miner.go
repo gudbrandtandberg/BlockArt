@@ -663,6 +663,11 @@ func (m *RMiner) Ink(_unused string, reply *uint32) error {
 	return nil
 }
 
+func (m *RMiner) GetSVG(shapeHash string, reply *string) error {
+	*reply = "<svg d='this is your shape'><svg/>"
+	return nil
+}
+
 func listenForArtNodes() (err error) {
 	gob.Register(ecdsa.PrivateKey{})
 	gob.Register(&elliptic.CurveParams{})

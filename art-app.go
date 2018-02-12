@@ -96,9 +96,13 @@ func main() {
 	if checkError(err) != nil {
 		return
 	}
+	SVGString, err := canvas.GetSvgString(shapeHash)
+	if checkError(err) != nil {
+		return
+	}
+	fmt.Println(SVGString)
 
 	fmt.Println("Will delete", shapeHash)
-
 	_, err = canvas.DeleteShape(validateNum, shapeHash)
 	if checkError(err) != nil {
 		return

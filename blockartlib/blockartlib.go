@@ -264,6 +264,7 @@ func (c BACanvas) AddShape(validateNum uint8, shapeType ShapeType, shapeSvgStrin
 // - DisconnectedError
 // - InvalidShapeHashError
 func (c BACanvas) GetSvgString(shapeHash string) (svgString string, err error) {
+	err = minerClient.Call("RMiner.GetSVG", shapeHash, &svgString)
 	return
 }
 
