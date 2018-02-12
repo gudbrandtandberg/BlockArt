@@ -407,8 +407,9 @@ func (ink IMiner) ProcessNewBlock(b *Block, currentBlock *Block, opQueue []Opera
 	if debugLocks { fmt.Println("unlocking10") }
 	maplock.Unlock()
 	if debugLocks { fmt.Println("unlocked10") }
+	longestChainHash := ink.getLongestChain()
 	*currentBlock = Block{
-		PrevHash: block2hash(b),
+		PrevHash: longestChainHash,
 		MinedBy:  ink.key.PublicKey,
 		Ops:      append(currentBlock.Ops, opQueue...),
 	}
@@ -539,6 +540,26 @@ func (ink IMiner) LengthFromTo(from string, to string) (length int) {
 	if debugLocks { fmt.Println("unlocking11") }
 	maplock.Unlock()
 	if debugLocks { fmt.Println("unlocked11") }
+	return
+}
+
+func (ink IMiner) getLongestChain() (hash string){
+	longest := 0
+	hash = ink.settings.GenesisBlockHash // hash of the genesis block
+	for _, head := range ink.getBlockChainHeads() {
+		bhash := block2hash(&head)
+		length := ink.Length(bhash)
+		if length > longest {
+			longest = length
+			hash = bhash
+		} else if length == longest {
+			// equal length chains: pick the larger hash
+			if bhash > hash {
+				hash = bhash
+			}
+		}
+	}
+	log.Printf("length of longest hash %s : %d", hash, longest)
 	return
 }
 
