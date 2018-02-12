@@ -793,21 +793,32 @@ func (m *RMiner) Ink(_unused string, reply *uint32) error {
 }
 
 func (m *RMiner) GetSVG(shapeHash string, reply *string) error {
-	*reply = "<svg d='this is your shape'><svg/>"
-	return nil
+	for _, block := range blocks {
+		for _, op := range block.Ops {
+			if string(op.SVGHash.Hash) == shapeHash {
+				*reply = "<svg d='" + op.SVG + "'><svg/>"
+				return nil
+			}
+		}
+	}
+	return nil //TODO: error?
 }
 
 func (m *RMiner) GetShapes(blockHash string, shapeHashes *[]string) error {
-	*shapeHashes = []string{"Hello", "World"}
+	for _, op := range blocks[blockHash].Ops {
+		*shapeHashes = append(*shapeHashes, string(op.SVGHash.Hash))
+	}
 	return nil
 }
 
 func (m *RMiner) GetGenesisBlock(_unused string, reply *string) error {
-	*reply = "Genesis-Hash"
+	*reply = ink.settings.GenesisBlockHash
 	return nil
 }
 func (m *RMiner) GetChildren(blockHash string, blockHashes *[]string) error {
-	*blockHashes = []string{"hashblock1", "hashblock2"}
+	for _, child := range ink.GetChildren(blockHash) {
+		*blockHashes = append(*blockHashes, block2hash(&child))
+	}
 	return nil
 }
 func listenForArtNodes() (err error) {
