@@ -683,6 +683,11 @@ func (m *RMiner) ReceiveNewOp(op Operation, reply *string) error {
 	return nil
 }
 
+func (m *RMiner) Ink(_unused string, reply *uint32) error {
+	*reply = uint32(42)
+	return nil
+}
+
 func listenForArtNodes() (err error) {
 	gob.Register(ecdsa.PrivateKey{})
 	gob.Register(&elliptic.CurveParams{})

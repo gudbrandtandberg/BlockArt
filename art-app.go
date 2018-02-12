@@ -104,6 +104,12 @@ func main() {
 		return
 	}
 
+	ink, err := canvas.GetInk()
+	if checkError(err) != nil {
+		return
+	}
+	fmt.Println("Ink remaining:", ink)
+
 	return
 
 	// Add two lines.
