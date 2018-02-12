@@ -38,7 +38,6 @@ import (
 )
 
 const debugLocks = false
-
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////
 //											START OF INTERFACES												 //
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -385,6 +384,7 @@ func (m2s *MinerToServer) GetNodes() (err error) {
 			client, err := rpc.Dial("tcp", addr.String())
 			if err == nil {
 				ink.neighbours[addr.String()] = client
+				fmt.Println("added neighbour")
 			} else {
 				fmt.Println(err)
 			}
@@ -475,6 +475,10 @@ func (ink IMiner) Mine() (err error) {
 
 	var currentBlock Block
 
+	if (len(blocks) > 0) {
+		//mine the longest chain, else blockchain doesn't exist so just mine away!
+		currentBlock = blocks[ink.getLongestChain()]
+	}
 	go func() {
 		for {
 			select {
