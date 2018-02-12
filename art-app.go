@@ -96,11 +96,36 @@ func main() {
 	if checkError(err) != nil {
 		return
 	}
+
+	// Read the shapeHash
 	SVGString, err := canvas.GetSvgString(shapeHash)
 	if checkError(err) != nil {
 		return
 	}
 	fmt.Println(SVGString)
+
+	// Get the genesis block
+	genesisHash, err := canvas.GetGenesisBlock()
+	if checkError(err) != nil {
+		return
+	}
+	fmt.Println(genesisHash)
+
+	// Get the children of the genesis block
+	genesisChildren, err := canvas.GetChildren(genesisHash)
+	if checkError(err) != nil {
+		return
+	}
+	fmt.Println(genesisChildren)
+
+	// Get the shapes contained in the genesis block
+	shapeHashes, err := canvas.GetShapes(genesisHash)
+	if checkError(err) != nil {
+		return
+	}
+	fmt.Println(shapeHashes)
+
+	// Delete a shape
 
 	fmt.Println("Will delete", shapeHash)
 	_, err = canvas.DeleteShape(validateNum, shapeHash)

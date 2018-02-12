@@ -10,7 +10,6 @@
 package main
 
 import (
-	"./blockartlib"
 	"bytes"
 	"crypto/ecdsa"
 	"crypto/elliptic"
@@ -34,6 +33,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"./blockartlib"
 )
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -177,13 +178,13 @@ func (m2m2 *MinerToMiner) GetHeartbeats(incAddr string, out *string) (err error)
 
 	if !check {
 		//if neighbour doesn't exist
-			client, err := rpc.Dial("tcp", incAddr)
-			if err == nil {
-				ink.neighbours[incAddr] = client
-			} else {
-				fmt.Println(err)
-			}	
+		client, err := rpc.Dial("tcp", incAddr)
+		if err == nil {
+			ink.neighbours[incAddr] = client
+		} else {
+			fmt.Println(err)
 		}
+	}
 
 	*out = "hello i'm online"
 	return
@@ -228,7 +229,7 @@ func (m2m *MinerToMiner) HeartbeatNeighbours() (err error) {
 		time.Sleep(2 * time.Second)
 		//if we have good neighbours, return
 		fmt.Println("len neighbours, minminers, neighbours: ", len(ink.neighbours), ink.settings.MinNumMinerConnections, ink.neighbours)
-		if ((len(ink.neighbours) >= int(ink.settings.MinNumMinerConnections)) || (len(ink.neighbours) == 0)) {
+		if (len(ink.neighbours) >= int(ink.settings.MinNumMinerConnections)) || (len(ink.neighbours) == 0) {
 			return
 		}
 		//else we get more neighbours
@@ -281,7 +282,6 @@ func (m2m *MinerToMiner) ReceiveBlock(block *Block, reply *bool) (err error) {
 	}
 	return
 }
-
 
 type MinerInfo struct {
 	Address net.Addr
@@ -560,7 +560,6 @@ var foundBlockCH (chan Block)
 var maplock sync.RWMutex
 var neighbourlock sync.RWMutex
 
-
 func tmp() net.Addr {
 	server := rpc.NewServer()
 	server.Register(&MinerToMiner{})
@@ -643,7 +642,7 @@ func main() {
 	err = ink.Mine()
 	newBlockCH <- genesisBlock
 
-	c := make(chan os.Signal, 1) 
+	c := make(chan os.Signal, 1)
 	signal.Notify(c, os.Interrupt)
 	func() {
 		for _ = range c {
@@ -693,6 +692,19 @@ func (m *RMiner) GetSVG(shapeHash string, reply *string) error {
 	return nil
 }
 
+func (m *RMiner) GetShapes(blockHash string, shapeHashes *[]string) error {
+	*shapeHashes = []string{"Hello", "World"}
+	return nil
+}
+
+func (m *RMiner) GetGenesisBlock(_unused string, reply *string) error {
+	*reply = "Genesis-Hash"
+	return nil
+}
+func (m *RMiner) GetChildren(blockHash string, blockHashes *[]string) error {
+	*blockHashes = []string{"hashblock1", "hashblock2"}
+	return nil
+}
 func listenForArtNodes() (err error) {
 	gob.Register(ecdsa.PrivateKey{})
 	gob.Register(&elliptic.CurveParams{})
@@ -762,6 +774,7 @@ func clearMinerKeyFile() {
 	filename := "./keys/" + ink.artAddr
 	os.Remove(filename)
 }
+
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////
 //								END OF ART2MINER, START OF VALIDATION										 	 //
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -840,7 +853,7 @@ func validateOpSigs(block *Block) bool {
 // TODO
 //Returns true if there are -NOT- any intersections with any shapes already in blockchain
 func validateIntersections(block *Block) bool {
-	
+
 	noIntersections := true
 	var toCheck []Operation
 	var theBlocks []Block
@@ -962,7 +975,6 @@ func checkError(err error) {
 		fmt.Println("ERROR:", err)
 	}
 }
-
 
 //writes out block's nonce and prevhash and level
 func dumpBlockchain() {
