@@ -10,6 +10,7 @@ import (
 	"crypto/x509"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"html/template"
 	"io/ioutil"
@@ -21,6 +22,22 @@ import (
 	"github.com/gorilla/websocket"
 )
 
+func readMinerAddrKeyWS() (minerAddr string, key string, err error) {
+	infos, err := ioutil.ReadDir("keys")
+	if err != nil {
+		return
+	}
+	if len(infos) == 0 {
+		err = errors.New("There are currently no miners online (according to ./keys/)")
+		return
+	}
+	filename := infos[0].Name()
+	minerAddr = filename
+	keyBytes, err := ioutil.ReadFile("./keys/" + filename)
+	key = string(keyBytes)
+	return
+}
+
 const (
 	webServerAddr = "127.0.0.1:7255"
 )
@@ -28,14 +45,20 @@ const (
 type cvsData struct {
 	PageTitle string
 	Key       string
+	Addr      string
 }
 
 func serveIndex(w http.ResponseWriter, req *http.Request) {
 	fmt.Println("Serving index")
 	w.Header().Set("Access-Control-Allow-Origin", "*")
 
-	keyBytes, err := ioutil.ReadFile("keys/key.txt")
-	data := cvsData{PageTitle: "BlockArt Client App", Key: string(keyBytes[:])}
+	minerAddr, key, err := readMinerAddrKeyWS()
+	if err != nil {
+		w.Write([]byte(err.Error()))
+		return
+	}
+
+	data := cvsData{PageTitle: "BlockArt Client App", Key: key, Addr: minerAddr}
 
 	tmpl, err := template.ParseFiles("html/index.html")
 	if err != nil {

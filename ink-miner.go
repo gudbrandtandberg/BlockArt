@@ -28,6 +28,7 @@ import (
 	"net/rpc"
 	"os"
 	"os/signal"
+	"sort"
 	"strconv"
 	"strings"
 	"sync"
@@ -946,7 +947,11 @@ func validateNonce(block *Block, difficulty uint8) bool {
 }
 
 func validatePrevHash(block *Block) bool {
+	fmt.Println("locking prevhash")
+	maplock.Lock()
 	_, ok := blocks[block.PrevHash]
+	maplock.Unlock()
+	fmt.Println("unlocking ph")
 	if ok {
 		return true
 	}
@@ -1107,13 +1112,27 @@ func checkError(err error) bool {
 	return false
 }
 
+type DumpStruct struct {
+	Hash string
+	PrevHash string
+	Level int
+}
+
 //writes out block's nonce and prevhash and level
 func dumpBlockchain() {
+	var toDump []DumpStruct
 	fmt.Println("BlockChain visualizer 2000")
 	fmt.Println("in format of {[blockHash][prevHash][level]}")
 	for hash, block := range blocks {
 		level := ink.LengthFromTo(hash, ink.settings.GenesisBlockHash)
-		fmt.Printf("{[%v][%v][%v]}\n", hash, block.PrevHash, level)
+		thisDump := DumpStruct { hash, block.PrevHash, level }
+		toDump = append(toDump, thisDump)
+		//fmt.Printf("{[%v][%v][%v]}\n", hash, block.PrevHash, level)
 	}
 
+	sort.Slice(toDump, func(i, j int) bool { return toDump[i].Level < toDump[j].Level })
+
+	for _, ds := range toDump {
+		fmt.Printf("{[%v][%v][%v]}\n", ds.Hash, ds.PrevHash, ds.Level)
+	}
 }
