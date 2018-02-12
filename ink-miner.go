@@ -34,10 +34,9 @@ import (
 	"time"
 
 	"./blockartlib"
-	"testing/quick"
 )
 
-const debugLocks = false
+const debugLocks = true
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////
 //											START OF INTERFACES												 //
@@ -228,7 +227,9 @@ func deleteUnresponsiveNeighbour(neighbourAddr string, neighbourRPC *rpc.Client)
 	err = neighbourRPC.Call("MinerToMiner.GetHeartbeats", ink.localAddr.String(), &rep)
 	if checkError(err) {
 		fmt.Println("delete:", neighbourAddr)
+		neighbourlock.Lock()
 		delete(ink.neighbours, neighbourAddr)
+		neighbourlock.Unlock()
 	}
 	return
 }
@@ -238,21 +239,22 @@ func (m2m *MinerToMiner) HeartbeatNeighbours() (err error) {
 		if debugLocks { log.Println("neighbourlock5 locking") }
 		neighbourlock.Lock()
 		if debugLocks { log.Println("neighbourlock5 locked") }
-		fmt.Println("LOCEKD")
 		for neighbourAddr, neighbourRPC := range ink.neighbours {
 			go deleteUnresponsiveNeighbour(neighbourAddr, neighbourRPC)
 		}
 		if debugLocks { log.Println("neighbourlock5 unlocking") }
 		neighbourlock.Unlock()
 		if debugLocks { log.Println("neighbourlock5 unlocked") }
-		fmt.Println("UNLOCEKD")
 		//give neighbours time to respond
 		time.Sleep(2 * time.Second)
 		//if we have good neighbours, return
+		neighbourlock.Lock()
 		fmt.Println("len neighbours, minminers, neighbours: ", len(ink.neighbours), ink.settings.MinNumMinerConnections, ink.neighbours)
 		if (len(ink.neighbours) >= int(ink.settings.MinNumMinerConnections)) || (len(ink.neighbours) == 0) {
+			neighbourlock.Unlock()
 			return
 		}
+		neighbourlock.Unlock()
 		//else we get more neighbours
 		err = miner2server.GetNodes()
 	}
@@ -772,6 +774,9 @@ func (m *RMiner) ReceiveNewOp(op Operation, reply *string) error {
 func (m *RMiner) Ink(_unused string, reply *uint32) error {
 	longestChainHash := ink.getLongestChain()
 	p := blockartlib.NewSVGParser()
+	log.Println("locking18")
+	maplock.Lock()
+	log.Println("locked18")
 	for longestChainHash != ink.settings.GenesisBlockHash {
 		b := blocks[longestChainHash]
 		if b.MinedBy == ink.key.PublicKey {
@@ -788,15 +793,23 @@ func (m *RMiner) Ink(_unused string, reply *uint32) error {
 			}
 			*reply -= shape.Area()
 		}
+		longestChainHash = blocks[longestChainHash].PrevHash
 	}
+	log.Println("unlocking18")
+	maplock.Unlock()
+	log.Println("unlocked18")
 	return nil
 }
 
 func (m *RMiner) GetSVG(shapeHash string, reply *string) error {
+	log.Println("locking19")
+	maplock.Lock()
+	log.Println("locked19")
+	defer maplock.Unlock()
 	for _, block := range blocks {
 		for _, op := range block.Ops {
 			if string(op.SVGHash.Hash) == shapeHash {
-				*reply = "<svg d='" + op.SVG + "'><svg/>"
+				*reply = op.SVG
 				return nil
 			}
 		}
@@ -805,6 +818,10 @@ func (m *RMiner) GetSVG(shapeHash string, reply *string) error {
 }
 
 func (m *RMiner) GetShapes(blockHash string, shapeHashes *[]string) error {
+	log.Println("locking20")
+	maplock.Lock()
+	log.Println("locked20")
+	defer maplock.Unlock()
 	for _, op := range blocks[blockHash].Ops {
 		*shapeHashes = append(*shapeHashes, string(op.SVGHash.Hash))
 	}
