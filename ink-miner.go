@@ -227,7 +227,9 @@ func deleteUnresponsiveNeighbour(neighbourAddr string, neighbourRPC *rpc.Client)
 	err = neighbourRPC.Call("MinerToMiner.GetHeartbeats", ink.localAddr.String(), &rep)
 	if checkError(err) {
 		fmt.Println("delete:", neighbourAddr)
+		neighbourlock.Lock()
 		delete(ink.neighbours, neighbourAddr)
+		neighbourlock.Unlock()
 	}
 	return
 }
@@ -237,21 +239,22 @@ func (m2m *MinerToMiner) HeartbeatNeighbours() (err error) {
 		if debugLocks { log.Println("neighbourlock5 locking") }
 		neighbourlock.Lock()
 		if debugLocks { log.Println("neighbourlock5 locked") }
-		fmt.Println("LOCEKD")
 		for neighbourAddr, neighbourRPC := range ink.neighbours {
 			go deleteUnresponsiveNeighbour(neighbourAddr, neighbourRPC)
 		}
 		if debugLocks { log.Println("neighbourlock5 unlocking") }
 		neighbourlock.Unlock()
 		if debugLocks { log.Println("neighbourlock5 unlocked") }
-		fmt.Println("UNLOCEKD")
 		//give neighbours time to respond
 		time.Sleep(2 * time.Second)
 		//if we have good neighbours, return
+		neighbourlock.Lock()
 		fmt.Println("len neighbours, minminers, neighbours: ", len(ink.neighbours), ink.settings.MinNumMinerConnections, ink.neighbours)
 		if (len(ink.neighbours) >= int(ink.settings.MinNumMinerConnections)) || (len(ink.neighbours) == 0) {
+			neighbourlock.Unlock()
 			return
 		}
+		neighbourlock.Unlock()
 		//else we get more neighbours
 		err = miner2server.GetNodes()
 	}
@@ -774,26 +777,70 @@ func (m *RMiner) ReceiveNewOp(op Operation, reply *string) error {
 }
 
 func (m *RMiner) Ink(_unused string, reply *uint32) error {
-	*reply = uint32(42)
+	longestChainHash := ink.getLongestChain()
+	p := blockartlib.NewSVGParser()
+	if debugLocks { log.Println("locking18") }
+	maplock.Lock()
+	if debugLocks { log.Println("locked18") }
+	for longestChainHash != ink.settings.GenesisBlockHash {
+		b := blocks[longestChainHash]
+		if b.MinedBy == ink.key.PublicKey {
+			if len(b.Ops) > 0 {
+				*reply += ink.settings.InkPerOpBlock
+			} else {
+				*reply += ink.settings.InkPerNoOpBlock
+			}
+		}
+		for _, op := range b.Ops {
+			shape, err := p.ParseXMLString(op.SVG)
+			if checkError(err) {
+				continue
+			}
+			*reply -= shape.Area()
+		}
+		longestChainHash = blocks[longestChainHash].PrevHash
+	}
+	if debugLocks { log.Println("unlocking18") }
+	maplock.Unlock()
+	if debugLocks { log.Println("unlocked18") }
 	return nil
 }
 
 func (m *RMiner) GetSVG(shapeHash string, reply *string) error {
-	*reply = "<svg d='this is your shape'><svg/>"
-	return nil
+	if debugLocks { log.Println("locking19") }
+	maplock.Lock()
+	if debugLocks { log.Println("locked19") }
+	defer maplock.Unlock()
+	for _, block := range blocks {
+		for _, op := range block.Ops {
+			if string(op.SVGHash.Hash) == shapeHash {
+				*reply = op.SVG
+				return nil
+			}
+		}
+	}
+	return nil //TODO: error?
 }
 
 func (m *RMiner) GetShapes(blockHash string, shapeHashes *[]string) error {
-	*shapeHashes = []string{"Hello", "World"}
+	if debugLocks { log.Println("locking20") }
+	maplock.Lock()
+	if debugLocks { log.Println("locked20") }
+	defer maplock.Unlock()
+	for _, op := range blocks[blockHash].Ops {
+		*shapeHashes = append(*shapeHashes, string(op.SVGHash.Hash))
+	}
 	return nil
 }
 
 func (m *RMiner) GetGenesisBlock(_unused string, reply *string) error {
-	*reply = "Genesis-Hash"
+	*reply = ink.settings.GenesisBlockHash
 	return nil
 }
 func (m *RMiner) GetChildren(blockHash string, blockHashes *[]string) error {
-	*blockHashes = []string{"hashblock1", "hashblock2"}
+	for _, child := range ink.GetChildren(blockHash) {
+		*blockHashes = append(*blockHashes, block2hash(&child))
+	}
 	return nil
 }
 func listenForArtNodes() (err error) {
