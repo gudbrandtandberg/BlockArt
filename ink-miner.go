@@ -85,7 +85,7 @@ type MinerFromANodeInterface interface {
 
 type IMinerInterface interface {
 	// Just a disconnected error? other errors will be handled by methods called within mine
-	GetLongestChain() (Block, error)
+	getLongestChain() (hash string)
 
 	Length(hash string) (err error)
 	ValidationCount(hash string) (err error)
@@ -375,10 +375,6 @@ func (m2s *MinerToServer) HeartbeatServer() (err error) {
 	return
 }
 
-func (ink IMiner) GetLongestChain() (block *Block, err error) {
-	return block, err
-}
-
 func (ink IMiner) GetBlockChain() (err error) {
     if debugLocks { fmt.Println("locking9") }
 	maplock.Lock()
@@ -547,6 +543,7 @@ func (ink IMiner) getLongestChain() (hash string){
 	longest := 0
 	hash = ink.settings.GenesisBlockHash // hash of the genesis block
 	for _, head := range ink.getBlockChainHeads() {
+		fmt.Println(head)
 		bhash := block2hash(&head)
 		length := ink.Length(bhash)
 		if length > longest {
@@ -835,9 +832,6 @@ func block2string(block *Block) string {
 */
 func validateBlock(block *Block, difficulty uint8) bool {
 	fmt.Println("loc")
-	maplock.Lock()
-	defer maplock.Unlock()
-
 	validNonce := validateNonce(block, difficulty)
 	validOps := validateOps(block)
 	validPrevHash := validatePrevHash(block)
@@ -919,6 +913,7 @@ func validateIdenticalSigs(block *Block) bool {
 	var theBlocks []Block
 	for _, op := range block.Ops {
 		//if there is same op/sig in blockchain, add it to a list to check for deletes
+		maplock.Lock()
 		for _, b := range blocks {
 			for _, o := range b.Ops {
 				if bytes.Equal(o.SVGHash.Hash, op.SVGHash.Hash) {
@@ -927,6 +922,7 @@ func validateIdenticalSigs(block *Block) bool {
 				}
 			}
 		}
+		maplock.Unlock()
 	}
 	if len(toCheck) > 0 {
 		noIdenticalOps = checkDeletes(toCheck, theBlocks)
@@ -936,8 +932,7 @@ func validateIdenticalSigs(block *Block) bool {
 
 //for each op, check if it is deleted in a later block. If it is, return true
 func checkDeletes(ops []Operation, blox []Block) bool {
-	tipOfChain, err := ink.GetLongestChain()
-	checkError(err)
+	tipOfChain := blocks[ink.getLongestChain()]
 
 iLoop:
 	for i := 0; i < len(ops); i++ {
@@ -953,7 +948,7 @@ iLoop:
 					}
 				}
 			}
-			*currBlock = blocks[currBlock.PrevHash]
+			currBlock = blocks[currBlock.PrevHash]
 		}
 		finalBlock := blocks[currBlock.PrevHash]
 		for _, currOp := range finalBlock.Ops {
@@ -975,8 +970,7 @@ iLoop:
 //Returns true if shape is in blockchain and not previously deleted and is a delete
 func validateDelete(block *Block) bool {
 	allPossible := true
-	tipOfChain, err := ink.GetLongestChain()
-	checkError(err)
+	tipOfChain := blocks[ink.getLongestChain()]
 	for _, op := range block.Ops {
 		if op.Delete {
 			//if it's a delete, handle it, if it's not a delete ignore
@@ -989,7 +983,7 @@ func validateDelete(block *Block) bool {
 						break BlockSelectionLoop
 					}
 				}
-				*currBlock = blocks[currBlock.PrevHash]
+				currBlock = blocks[currBlock.PrevHash]
 			}
 			if currBlock.PrevHash == ink.settings.GenesisBlockHash {
 				return false
