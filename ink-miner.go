@@ -19,7 +19,6 @@ import (
 	"crypto/x509"
 	"encoding/gob"
 	"encoding/hex"
-	"encoding/json"
 	"errors"
 	"flag"
 	"fmt"
@@ -227,15 +226,18 @@ func (m2m *MinerToMiner) ReceiveBlock(block *Block, reply *bool) (err error) {
 		difficulty = ink.settings.PoWDifficultyOpBlock
 	}
 	if validateBlock(block, difficulty) {
-		fmt.Println("trying to validate")
-        if debugLocks { fmt.Println("locking8") }
+		//fmt.Println("trying to validate")
+		hash := block2hash(&remoteBlock)
+		if debugLocks { fmt.Println("locking8") }
 		maplock.Lock()
         if debugLocks { fmt.Println("locked8") }
 		_, ok := blocks[block.PrevHash]
+		_, exists := blocks[hash]
 		if debugLocks { fmt.Println("unlocking8") }
 		maplock.Unlock()
 		if debugLocks { fmt.Println("unlocked8") }
-		if ok {
+		if ok && !exists {
+			log.Printf("validated nonce = %s from block = %s", remoteBlock.Nonce, hash)
 			fmt.Println("channel ")
 			newBlockCH <- remoteBlock
 			fmt.Println("channel2")
@@ -249,9 +251,13 @@ func (m2m *MinerToMiner) ReceiveBlock(block *Block, reply *bool) (err error) {
 			if debugLocks { fmt.Println("unlocking13") }
 			maplock.Unlock()
 			if debugLocks { fmt.Println("unlocked13") }
+			log.Printf("Number of blocks in memory = %d", len(hashes))
+			miner2miner.FloodToPeers(&remoteBlock)
+			/*
 			for _, k := range hashes {
 				fmt.Println("k, validationcount, length(k): ", k, ink.ValidationCount(k), ink.Length(k))
 			}
+			*/
 		} else {
 			//			log.Println("tsk tsk Received block does not append to a head")
 		}
@@ -386,8 +392,8 @@ func (ink IMiner) ProcessNewBlock(b *Block, currentBlock *Block, opQueue []Opera
 }
 
 func (ink IMiner) ProcessMinedBlock(currentBlock *Block, opQueue []Operation) {
-	log.Printf("found nonce: %s", currentBlock.Nonce)
 	prevHash := block2hash(currentBlock)
+	log.Printf("found nonce = %s with hash = %s", currentBlock.Nonce, prevHash)
     if debugLocks { fmt.Println("locking") }
 	maplock.Lock()
     if debugLocks { fmt.Println("locked") }
@@ -759,14 +765,13 @@ func block2hash(block *Block) string {
 
 func block2string(block *Block) string {
 	//	res, _ := json.Marshal(block.Ops)
-	return block.PrevHash + block.Nonce + block.MinedBy.X.String() + block.MinedBy.Y.String()
-
-	res1B, err := json.Marshal(*block)
-	if err != nil {
-		log.Println(err)
-		return ""
+	var buffer bytes.Buffer
+	for _, op := range block.Ops {
+		buffer.Write(op.SVGHash.Hash)
+		opString := op.Owner.X.String() + op.Owner.Y.String() + op.SVG
+		buffer.WriteString(opString)
 	}
-	return string(res1B)
+	return block.PrevHash + block.Nonce + block.MinedBy.X.String() + block.MinedBy.Y.String() + buffer.String()
 }
 
 /*
