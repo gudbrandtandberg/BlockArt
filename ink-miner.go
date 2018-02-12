@@ -578,7 +578,6 @@ func main() {
 		serverClient: client,
 		key:          *priv,
 		localAddr:    l,
-		artAddr:      "", // <-- this is set in listenForArtNodes()
 		neighbours:   make(map[string]*rpc.Client),
 	}
 
@@ -589,6 +588,7 @@ func main() {
 
 	// Listen incoming RPC calls from artnodes
 	go listenForArtNodes()
+	defer clearMinerKeyFile()
 
 	genesisBlock := Block{
 		PrevHash: "foobar",
@@ -620,7 +620,7 @@ func main() {
 
 	c := make(chan os.Signal, 1)
 	signal.Notify(c, os.Interrupt)
-	go func() {
+	func() {
 		for _ = range c {
 			dumpBlockchain()
 			clearMinerKeyFile()
@@ -665,6 +665,8 @@ func (m *RMiner) RecordAddOp(op Operation, reply *string) error {
 	if !ecdsa.Verify(&ink.key.PublicKey, op.SVGHash.Hash, op.SVGHash.R, op.SVGHash.S) {
 		return errors.New("Invalid signature")
 	}
+
+	newOpsCH <- op
 
 	fmt.Println("recorded: ", op.SVG)
 	return nil
@@ -725,7 +727,11 @@ func encodeKey(key ecdsa.PrivateKey) (string, error) {
 }
 
 func writeMinerAddrKeyToFile() {
-	keyString, _ := encodeKey(ink.key)
+
+	err := os.MkdirAll("keys/", 0666)
+	checkError(err)
+	keyString, err := encodeKey(ink.key)
+	checkError(err)
 	filename := "./keys/" + ink.artAddr
 	fmt.Println("Writing file")
 	ioutil.WriteFile(filename, []byte(keyString), 0666)

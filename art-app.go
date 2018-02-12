@@ -19,6 +19,7 @@ import (
 	"crypto/ecdsa"
 	"crypto/x509"
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"io/ioutil"
 	"os"
@@ -53,18 +54,33 @@ func decodeKey(hexStr string) (key *ecdsa.PrivateKey, err error) {
 	return x509.ParseECPrivateKey(keyBytes)
 }
 
+func readMinerAddrKey() (minerAddr string, key *ecdsa.PrivateKey, err error) {
+	infos, err := ioutil.ReadDir("keys")
+	if err != nil {
+		return
+	}
+	if len(infos) == 0 {
+		err = errors.New("There are currently no miners online (according to ./keys/)")
+		return
+	}
+	filename := infos[0].Name()
+	minerAddr = filename
+	keyBytes, err := ioutil.ReadFile("./keys/" + filename)
+	key, err = decodeKey(string(keyBytes))
+	return
+}
+
 func main() {
 
-	testParser()
-	return
-	minerAddr := "127.0.0.1:9878"
+	// testParser()
+	// return
+	//minerAddr := "127.0.0.1:9878"
 	// curve := elliptic.P384()
 	// privKey, err := ecdsa.GenerateKey(curve, rand.Reader)
 
-	keyBytes, err := ioutil.ReadFile("keys/key.txt")
-	privKey, err := decodeKey(string(keyBytes))
-	if err != nil {
-		fmt.Println("Could not decode key")
+	minerAddr, privKey, err := readMinerAddrKey()
+	if checkError(err) != nil {
+		return
 	}
 
 	//Open a canvas.
