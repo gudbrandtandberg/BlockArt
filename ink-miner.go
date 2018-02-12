@@ -1,6 +1,6 @@
 /*
 
-	An ink miner mines ink and disseminates blocks
+    An ink miner mines ink and disseminates blocks
 
 	Usage:
 	go run ink-miner.go [server ip:port] [pubKey] [privKey]
@@ -162,19 +162,27 @@ func (m2m *MinerToMiner) FloodToPeers(block *Block) (err error) {
 //	fmt.Println(block.PrevHash, block.Nonce, block.Ops, block.MinedBy)
 	m2m.HeartbeatNeighbours()
 
+	if debugLocks { log.Println("neighbourlock1 locking") }
 	neighbourlock.Lock()
+	if debugLocks { log.Println("neighbourlock1 locked") }
 	for _, neighbour := range ink.neighbours {
 		var reply bool
 		go checkError(neighbour.Call("MinerToMiner.ReceiveBlock", &block, &reply))
 	}
+	if debugLocks { log.Println("neighbourlock1 unlocking") }
 	neighbourlock.Unlock()
+	if debugLocks { log.Println("neighbourlock1 unlocked") }
 	return
 }
 
 func (m2m *MinerToMiner) GetHeartbeats(incAddr string, out *string) (err error) {
+	if debugLocks { log.Println("neighbourlock2 locking") }
 	neighbourlock.Lock()
+	if debugLocks { log.Println("neighbourlock2 locked") }
 	_, ok := ink.neighbours[incAddr]
+	if debugLocks { log.Println("neighbourlock2 unlocking") }
 	neighbourlock.Unlock()
+	if debugLocks { log.Println("neighbourlock2 unlocked") }
 
 	if !ok {
 		//if neighbour doesn't exist
@@ -182,9 +190,13 @@ func (m2m *MinerToMiner) GetHeartbeats(incAddr string, out *string) (err error) 
 			client, err := rpc.Dial("tcp", incAddr)
 			if !checkError(err) {
 				fmt.Println("added:", incAddr)
+				if debugLocks { log.Println("neighbourlock3 locking") }
 				neighbourlock.Lock()
+				if debugLocks { log.Println("neighbourlock3 locked") }
 				ink.neighbours[incAddr] = client
+				if debugLocks { log.Println("neighbourlock3 unlocking") }
 				neighbourlock.Unlock()
+				if debugLocks { log.Println("neighbourlock3 unlocked") }
 			}
 		}()
 	}
@@ -221,12 +233,16 @@ func deleteUnresponsiveNeighbour(neighbourAddr string, neighbourRPC *rpc.Client)
 
 func (m2m *MinerToMiner) HeartbeatNeighbours() (err error) {
 	for {
+		if debugLocks { log.Println("neighbourlock5 locking") }
 		neighbourlock.Lock()
+		if debugLocks { log.Println("neighbourlock5 locked") }
 		fmt.Println("LOCEKD")
 		for neighbourAddr, neighbourRPC := range ink.neighbours {
 			go deleteUnresponsiveNeighbour(neighbourAddr, neighbourRPC)
 		}
+		if debugLocks { log.Println("neighbourlock5 unlocking") }
 		neighbourlock.Unlock()
+		if debugLocks { log.Println("neighbourlock5 unlocked") }
 		fmt.Println("UNLOCEKD")
 		//give neighbours time to respond
 		time.Sleep(2 * time.Second)
@@ -277,7 +293,10 @@ func (m2m *MinerToMiner) ReceiveBlock(block *Block, reply *bool) (err error) {
 			maplock.Unlock()
 			if debugLocks { fmt.Println("unlocked13") }
 			log.Printf("Number of blocks in memory = %d", len(hashes))
-			miner2miner.FloodToPeers(&remoteBlock)
+
+			// reflood block
+			foundBlockCH <- remoteBlock
+			//miner2miner.FloodToPeers(&remoteBlock)
 			/*
 			for _, k := range hashes {
 				fmt.Println("k, validationcount, length(k): ", k, ink.ValidationCount(k), ink.Length(k))
@@ -351,8 +370,11 @@ func (m2s *MinerToServer) Register() (err error) {
 
 // GetNodes makes RPC GetNodes(pubKey) call, makes a call to ConnectToNeighbour for each returned addr, can return errors
 func (m2s *MinerToServer) GetNodes() (err error) {
+	if debugLocks { log.Println("neighbourlock6 locking") }
 	neighbourlock.Lock()
-	defer neighbourlock.Unlock()
+	if debugLocks { log.Println("neighbourlock6 locked") }
+
+
 	minerAddresses := make([]net.Addr, 0)
 	err = ink.serverClient.Call("RServer.GetNodes", ink.key.PublicKey, &minerAddresses)
 	fmt.Println("mineraddrs: ", minerAddresses)
@@ -367,6 +389,11 @@ func (m2s *MinerToServer) GetNodes() (err error) {
 			}
 		}
 	}
+
+	if debugLocks { log.Println("neighbourlock6 unlocking") }
+	neighbourlock.Unlock()
+	if debugLocks { log.Println("neighbourlock6 unlocked") }
+
 	return
 }
 
@@ -386,8 +413,10 @@ func (ink IMiner) GetBlockChain() (err error) {
 	maplock.Lock()
     if debugLocks { fmt.Println("locked9") }
 
+
+	if debugLocks { log.Println("neighbourlock7 locking") }
 	neighbourlock.Lock()
-	defer neighbourlock.Unlock()
+	if debugLocks { log.Println("neighbourlock7 locked") }
 	for _, neighbour := range ink.neighbours {
 		blockChain := make([]Block, 0)
 		err = neighbour.Call("MinerToMiner.FetchBlockChain", "", &blockChain)
@@ -398,6 +427,10 @@ func (ink IMiner) GetBlockChain() (err error) {
 	if debugLocks { fmt.Println("unlocking9") }
 	maplock.Unlock()
 	if debugLocks { fmt.Println("unlocked9") }
+	if debugLocks { log.Println("neighbourlock7 unlocking") }
+	neighbourlock.Unlock()
+	if debugLocks { log.Println("neighbourlock7 unlocked") }
+
 	return
 }
 
