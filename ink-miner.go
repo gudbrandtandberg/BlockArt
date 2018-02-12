@@ -34,6 +34,7 @@ import (
 	"time"
 
 	"./blockartlib"
+	"testing/quick"
 )
 
 const debugLocks = false
@@ -769,7 +770,25 @@ func (m *RMiner) ReceiveNewOp(op Operation, reply *string) error {
 }
 
 func (m *RMiner) Ink(_unused string, reply *uint32) error {
-	*reply = uint32(42)
+	longestChainHash := ink.getLongestChain()
+	p := blockartlib.NewSVGParser()
+	for longestChainHash != ink.settings.GenesisBlockHash {
+		b := blocks[longestChainHash]
+		if b.MinedBy == ink.key.PublicKey {
+			if len(b.Ops) > 0 {
+				*reply += ink.settings.InkPerOpBlock
+			} else {
+				*reply += ink.settings.InkPerNoOpBlock
+			}
+		}
+		for _, op := range b.Ops {
+			shape, err := p.ParseXMLString(op.SVG)
+			if checkError(err) {
+				continue
+			}
+			*reply -= shape.Area()
+		}
+	}
 	return nil
 }
 
