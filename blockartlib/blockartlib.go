@@ -304,6 +304,7 @@ func (c BACanvas) DeleteShape(validateNum uint8, shapeHash string) (inkRemaining
 // - DisconnectedError
 // - InvalidBlockHashError
 func (c BACanvas) GetShapes(blockHash string) (shapeHashes []string, err error) {
+	err = minerClient.Call("RMiner.GetShapes", blockHash, &shapeHashes)
 	return
 }
 
@@ -311,6 +312,7 @@ func (c BACanvas) GetShapes(blockHash string) (shapeHashes []string, err error) 
 // Can return the following errors:
 // - DisconnectedError
 func (c BACanvas) GetGenesisBlock() (blockHash string, err error) {
+	err = minerClient.Call("RMiner.GetGenesisBlock", "", &blockHash)
 	return
 }
 
@@ -319,13 +321,14 @@ func (c BACanvas) GetGenesisBlock() (blockHash string, err error) {
 // - DisconnectedError
 // - InvalidBlockHashError
 func (c BACanvas) GetChildren(blockHash string) (blockHashes []string, err error) {
+	err = minerClient.Call("RMiner.GetChildren", blockHash, &blockHashes)
 	return
 }
 
 // CloseCanvas closes the canvas/connection to the BlockArt network.
 // - DisconnectedError
 func (c BACanvas) CloseCanvas() (inkRemaining uint32, err error) {
-	return
+	return c.GetInk()
 }
 
 // </CANVAS IMPLEMENTATION>

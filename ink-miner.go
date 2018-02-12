@@ -10,7 +10,6 @@
 package main
 
 import (
-	"./blockartlib"
 	"bytes"
 	"crypto/ecdsa"
 	"crypto/elliptic"
@@ -33,6 +32,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"./blockartlib"
 )
 
 const debugLocks = false
@@ -248,7 +249,7 @@ func (m2m *MinerToMiner) HeartbeatNeighbours() (err error) {
 		time.Sleep(2 * time.Second)
 		//if we have good neighbours, return
 		fmt.Println("len neighbours, minminers, neighbours: ", len(ink.neighbours), ink.settings.MinNumMinerConnections, ink.neighbours)
-		if ((len(ink.neighbours) >= int(ink.settings.MinNumMinerConnections)) || (len(ink.neighbours) == 0)) {
+		if (len(ink.neighbours) >= int(ink.settings.MinNumMinerConnections)) || (len(ink.neighbours) == 0) {
 			return
 		}
 		//else we get more neighbours
@@ -310,7 +311,6 @@ func (m2m *MinerToMiner) ReceiveBlock(block *Block, reply *bool) (err error) {
 	}
 	return
 }
-
 
 type MinerInfo struct {
 	Address net.Addr
@@ -778,6 +778,19 @@ func (m *RMiner) GetSVG(shapeHash string, reply *string) error {
 	return nil
 }
 
+func (m *RMiner) GetShapes(blockHash string, shapeHashes *[]string) error {
+	*shapeHashes = []string{"Hello", "World"}
+	return nil
+}
+
+func (m *RMiner) GetGenesisBlock(_unused string, reply *string) error {
+	*reply = "Genesis-Hash"
+	return nil
+}
+func (m *RMiner) GetChildren(blockHash string, blockHashes *[]string) error {
+	*blockHashes = []string{"hashblock1", "hashblock2"}
+	return nil
+}
 func listenForArtNodes() (err error) {
 	fmt.Println("Blocks:", len(blocks))
 	checkError(err)
@@ -829,13 +842,14 @@ func encodeKey(key ecdsa.PrivateKey) (string, error) {
 }
 
 func writeMinerAddrKeyToFile() {
-	err := os.MkdirAll("keys/", 0666)
+	err := os.MkdirAll("keys/", 0777)
 	checkError(err)
 	keyString, err := encodeKey(ink.key)
 	checkError(err)
 	filename := "./keys/" + ink.artAddr
 	fmt.Println("Writing file")
-	ioutil.WriteFile(filename, []byte(keyString), 0666)
+	err = ioutil.WriteFile(filename, []byte(keyString), 0777)
+	checkError(err)
 }
 
 func clearMinerKeyFile() {
@@ -843,6 +857,7 @@ func clearMinerKeyFile() {
 	filename := "./keys/" + ink.artAddr
 	os.Remove(filename)
 }
+
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////
 //								END OF ART2MINER, START OF VALIDATION										 	 //
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -1044,7 +1059,6 @@ func checkError(err error) bool {
 	}
 	return false
 }
-
 
 //writes out block's nonce and prevhash and level
 func dumpBlockchain() {
