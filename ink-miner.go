@@ -32,7 +32,6 @@ import (
 	"strings"
 	"sync"
 	"time"
-	"math"
 )
 
 const debugLocks = false
