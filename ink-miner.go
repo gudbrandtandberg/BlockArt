@@ -235,29 +235,28 @@ func deleteUnresponsiveNeighbour(neighbourAddr string, neighbourRPC *rpc.Client)
 }
 
 func (m2m *MinerToMiner) HeartbeatNeighbours() (err error) {
-	for {
-		if debugLocks { log.Println("neighbourlock5 locking") }
-		neighbourlock.Lock()
-		if debugLocks { log.Println("neighbourlock5 locked") }
-		for neighbourAddr, neighbourRPC := range ink.neighbours {
-			go deleteUnresponsiveNeighbour(neighbourAddr, neighbourRPC)
-		}
-		if debugLocks { log.Println("neighbourlock5 unlocking") }
-		neighbourlock.Unlock()
-		if debugLocks { log.Println("neighbourlock5 unlocked") }
-		//give neighbours time to respond
-		time.Sleep(2 * time.Second)
-		//if we have good neighbours, return
-		neighbourlock.Lock()
-		fmt.Println("len neighbours, minminers, neighbours: ", len(ink.neighbours), ink.settings.MinNumMinerConnections, ink.neighbours)
-		if (len(ink.neighbours) >= int(ink.settings.MinNumMinerConnections)) || (len(ink.neighbours) == 0) {
-			neighbourlock.Unlock()
-			return
-		}
-		neighbourlock.Unlock()
-		//else we get more neighbours
-		err = miner2server.GetNodes()
+	if debugLocks { log.Println("neighbourlock5 locking") }
+	neighbourlock.Lock()
+	if debugLocks { log.Println("neighbourlock5 locked") }
+	for neighbourAddr, neighbourRPC := range ink.neighbours {
+		go deleteUnresponsiveNeighbour(neighbourAddr, neighbourRPC)
 	}
+	if debugLocks { log.Println("neighbourlock5 unlocking") }
+	neighbourlock.Unlock()
+	if debugLocks { log.Println("neighbourlock5 unlocked") }
+	//give neighbours time to respond
+	time.Sleep(2 * time.Second)
+	//if we have good neighbours, return
+	neighbourlock.Lock()
+	fmt.Println("len neighbours, minminers, neighbours: ", len(ink.neighbours), ink.settings.MinNumMinerConnections, ink.neighbours)
+	if (len(ink.neighbours) >= int(ink.settings.MinNumMinerConnections)) || (len(ink.neighbours) == 0) {
+		neighbourlock.Unlock()
+		return
+	}
+	neighbourlock.Unlock()
+	//else we get more neighbours
+	err = miner2server.GetNodes()
+	return
 }
 
 func (m2m *MinerToMiner) ReceiveBlock(block *Block, reply *bool) (err error) {
