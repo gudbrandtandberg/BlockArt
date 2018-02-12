@@ -271,6 +271,7 @@ func (c BACanvas) GetSvgString(shapeHash string) (svgString string, err error) {
 // Can return the following errors:
 // - DisconnectedError
 func (c BACanvas) GetInk() (inkRemaining uint32, err error) {
+	err = minerClient.Call("RMiner.Ink", "", &inkRemaining)
 	return
 }
 
