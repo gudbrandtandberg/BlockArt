@@ -10,6 +10,7 @@
 package main
 
 import (
+	"./blockartlib"
 	"bytes"
 	"crypto/ecdsa"
 	"crypto/elliptic"
@@ -33,8 +34,6 @@ import (
 	"strings"
 	"sync"
 	"time"
-
-	"./blockartlib"
 )
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -170,7 +169,22 @@ func (m2m *MinerToMiner) FloodToPeers(block *Block) (err error) {
 	return
 }
 
-func (m2m2 *MinerToMiner) GetHeartbeats(inc string, out *string) (err error) {
+func (m2m2 *MinerToMiner) GetHeartbeats(incAddr string, out *string) (err error) {
+	neighbourlock.Lock()
+	neighbourlock.Unlock()
+
+	_, check := ink.neighbours[incAddr]
+
+	if !check {
+		//if neighbour doesn't exist
+			client, err := rpc.Dial("tcp", incAddr)
+			if err == nil {
+				ink.neighbours[incAddr] = client
+			} else {
+				fmt.Println(err)
+			}	
+		}
+
 	*out = "hello i'm online"
 	return
 }
@@ -193,11 +207,13 @@ func (m2m *MinerToMiner) FetchBlockChain(i string, blockchain *[]Block) (err err
 
 func (m2m *MinerToMiner) HeartbeatNeighbours() (err error) {
 	for {
+		neighbourlock.Lock()
+		defer neighbourlock.Unlock()
 		for neighbourAddr, neighbourRPC := range ink.neighbours {
 			var rep string
 			timeout := make(chan error, 1)
 			go func() {
-				timeout <- neighbourRPC.Call("MinerToMiner.GetHeartbeats", "", &rep)
+				timeout <- neighbourRPC.Call("MinerToMiner.GetHeartbeats", ink.localAddr.String(), &rep)
 			}()
 			select {
 			case err := <-timeout:
@@ -212,7 +228,7 @@ func (m2m *MinerToMiner) HeartbeatNeighbours() (err error) {
 		time.Sleep(2 * time.Second)
 		//if we have good neighbours, return
 		fmt.Println("len neighbours, minminers, neighbours: ", len(ink.neighbours), ink.settings.MinNumMinerConnections, ink.neighbours)
-		if (len(ink.neighbours) >= int(ink.settings.MinNumMinerConnections)) || (len(ink.neighbours) == 0) {
+		if ((len(ink.neighbours) >= int(ink.settings.MinNumMinerConnections)) || (len(ink.neighbours) == 0)) {
 			return
 		}
 		//else we get more neighbours
@@ -265,6 +281,7 @@ func (m2m *MinerToMiner) ReceiveBlock(block *Block, reply *bool) (err error) {
 	}
 	return
 }
+
 
 type MinerInfo struct {
 	Address net.Addr
@@ -324,6 +341,8 @@ func (m2s *MinerToServer) Register() (err error) {
 
 // GetNodes makes RPC GetNodes(pubKey) call, makes a call to ConnectToNeighbour for each returned addr, can return errors
 func (m2s *MinerToServer) GetNodes() (err error) {
+	neighbourlock.Lock()
+	defer neighbourlock.Unlock()
 	minerAddresses := make([]net.Addr, 0)
 	err = ink.serverClient.Call("RServer.GetNodes", ink.key.PublicKey, &minerAddresses)
 	fmt.Println("mineraddrs: ", minerAddresses)
@@ -360,6 +379,9 @@ func (ink IMiner) GetBlockChain() (err error) {
 	fmt.Println("locking9")
 	maplock.Lock()
 	fmt.Println("locked9")
+
+	neighbourlock.Lock()
+	defer neighbourlock.Unlock()
 	for _, neighbour := range ink.neighbours {
 		blockChain := make([]Block, 0)
 		err = neighbour.Call("MinerToMiner.FetchBlockChain", "", &blockChain)
@@ -536,6 +558,8 @@ var newBlockCH (chan Block)
 var foundBlockCH (chan Block)
 
 var maplock sync.RWMutex
+var neighbourlock sync.RWMutex
+
 
 func tmp() net.Addr {
 	server := rpc.NewServer()
@@ -602,6 +626,7 @@ func main() {
 			miner2miner.FloodToPeers(&minedBlock)
 		}
 	}()
+
 	fmt.Println(err, ink.neighbours)
 
 	// Heartbeat server
@@ -618,7 +643,7 @@ func main() {
 	err = ink.Mine()
 	newBlockCH <- genesisBlock
 
-	c := make(chan os.Signal, 1)
+	c := make(chan os.Signal, 1) 
 	signal.Notify(c, os.Interrupt)
 	func() {
 		for _ = range c {
@@ -727,7 +752,6 @@ func clearMinerKeyFile() {
 	filename := "./keys/" + ink.artAddr
 	os.Remove(filename)
 }
-
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////
 //								END OF ART2MINER, START OF VALIDATION										 	 //
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -755,9 +779,6 @@ func block2string(block *Block) string {
 		Check that the nonce for the block is valid: PoW is correct and has the right difficulty.
 		Check that each operation in the block has a valid signature (this signature should be generated using the private key and the operation).
 		Check that the previous block hash points to a legal, previously generated, block.
-<<<<<<< HEAD
-=======
-
 >>>>>>> 02c4270da860c3cff88e5410d1b8ca5832ea1e01
 */
 func validateBlock(block *Block, difficulty uint8) bool {
@@ -809,7 +830,7 @@ func validateOpSigs(block *Block) bool {
 // TODO
 //Returns true if there are -NOT- any intersections with any shapes already in blockchain
 func validateIntersections(block *Block) bool {
-
+	
 	noIntersections := true
 	var toCheck []Operation
 	var theBlocks []Block
@@ -931,6 +952,7 @@ func checkError(err error) {
 		fmt.Println("ERROR:", err)
 	}
 }
+
 
 //writes out block's nonce and prevhash and level
 func dumpBlockchain() {
