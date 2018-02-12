@@ -649,26 +649,12 @@ func (m *RMiner) OpenCanvas(keyHash [16]byte, reply *CanvasSettings) error {
 	return nil
 }
 
-func (m *RMiner) RecordDeleteOp(op Operation, reply *string) error {
-	fmt.Println("Will delete: ", op.SVG)
-
+func (m *RMiner) ReceiveNewOp(op Operation, reply *string) error {
 	if !ecdsa.Verify(&ink.key.PublicKey, op.SVGHash.Hash, op.SVGHash.R, op.SVGHash.S) {
 		return errors.New("Invalid signature")
 	}
-
-	return nil
-}
-
-func (m *RMiner) RecordAddOp(op Operation, reply *string) error {
-	fmt.Println("Will add this shape to my current block:")
-
-	if !ecdsa.Verify(&ink.key.PublicKey, op.SVGHash.Hash, op.SVGHash.R, op.SVGHash.S) {
-		return errors.New("Invalid signature")
-	}
-
 	newOpsCH <- op
-
-	fmt.Println("recorded: ", op.SVG)
+	fmt.Println("Added op:", op.SVG)
 	return nil
 }
 
@@ -727,7 +713,6 @@ func encodeKey(key ecdsa.PrivateKey) (string, error) {
 }
 
 func writeMinerAddrKeyToFile() {
-
 	err := os.MkdirAll("keys/", 0666)
 	checkError(err)
 	keyString, err := encodeKey(ink.key)

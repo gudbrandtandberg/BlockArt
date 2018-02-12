@@ -250,7 +250,7 @@ func (c BACanvas) AddShape(validateNum uint8, shapeType ShapeType, shapeSvgStrin
 	op.SVGHash = signShapeString(op.SVG, &c.privKey)
 	shapeHash = hex.EncodeToString(op.SVGHash.Hash)
 
-	err = minerClient.Call("RMiner.RecordAddOp", op, nil)
+	err = minerClient.Call("RMiner.ReceiveNewOp", op, nil)
 	if err != nil {
 		return
 	}
@@ -288,7 +288,7 @@ func (c BACanvas) DeleteShape(validateNum uint8, shapeHash string) (inkRemaining
 	op.SVGHash = signShapeString(op.SVG, &c.privKey)
 	op.ValNum = validateNum
 
-	err = minerClient.Call("RMiner.RecordDeleteOp", op, nil)
+	err = minerClient.Call("RMiner.ReceiveNewOp", op, nil)
 	if err != nil {
 		return
 	}
