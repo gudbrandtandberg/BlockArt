@@ -25,6 +25,7 @@ import (
 	"os"
 
 	"./blockartlib"
+	"time"
 )
 
 var examples = map[string]string{
@@ -133,12 +134,15 @@ func main() {
 		return
 	}
 
-	ink, err := canvas.GetInk()
-	if checkError(err) != nil {
-		return
-	}
-	fmt.Println("Ink remaining:", ink)
+	for {
+		ink, err := canvas.GetInk()
+		if checkError(err) != nil {
+			return
+		}
+		fmt.Println("Ink remaining:", ink)
 
+		time.Sleep(time.Second * 2)
+	}
 	return
 
 	// Add two lines.

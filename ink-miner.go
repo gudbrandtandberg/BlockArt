@@ -774,6 +774,7 @@ func (m *RMiner) ReceiveNewOp(op Operation, reply *string) error {
 
 func (m *RMiner) Ink(_unused string, reply *uint32) error {
 	longestChainHash := ink.getLongestChain()
+	fmt.Println("INKINK:", longestChainHash)
 	p := blockartlib.NewSVGParser()
 	if debugLocks { log.Println("locking18") }
 	maplock.Lock()
