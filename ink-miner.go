@@ -35,6 +35,7 @@ import (
 	"time"
 
 	"./blockartlib"
+	"math"
 )
 
 const debugLocks = false
@@ -728,13 +729,13 @@ func registerGobAndCreateChannels() {
 
 	blocks = make(map[string]Block)
 
-	newOpCH = make(chan Operation, 255)
+	newOpCH = make(chan Operation, math.MaxUint8)
 	// big enough to handle one op from each miner
-	foundOpCH = make(chan Operation, 65535)
-	newBlockCH = make(chan Block, 255)
-	foundBlockCH = make(chan Block, 255)
-	validatedOpsCH = make(chan Operation, 255)
-	toValidateOpsCH = make(chan Operation, 255)
+	foundOpCH = make(chan Operation, math.MaxUint16)
+	newBlockCH = make(chan Block, math.MaxUint8)
+	foundBlockCH = make(chan Block, math.MaxUint8)
+	validatedOpsCH = make(chan Operation, math.MaxUint8)
+	toValidateOpsCH = make(chan Operation, math.MaxUint8)
 
 }
 
