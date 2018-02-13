@@ -800,7 +800,6 @@ func main() {
 	for _ = range c {
 		dumpBlockchain()
 		clearMinerKeyFile()
-		time.Sleep(time.Second*3)
 		os.Exit(0)
 	} // This is blocking. Do not add anything after this.
 }
