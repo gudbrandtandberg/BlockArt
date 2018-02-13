@@ -1008,8 +1008,9 @@ func writeMinerAddrKeyToFile() {
 	checkError(err)
 	keyString, err := encodeKey(ink.key)
 	checkError(err)
-	filename := "./keys/" + ink.artAddr
-	fmt.Println("Writing file")
+	splitAddr := strings.Split(ink.artAddr, ":")
+	filename := "./keys/" + splitAddr[len(splitAddr) - 1]
+	fmt.Println("Writing address", ink.artAddr, "to file")
 	err = ioutil.WriteFile(filename, []byte(keyString), 0777)
 	checkError(err)
 }

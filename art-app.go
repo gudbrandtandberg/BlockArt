@@ -26,6 +26,8 @@ import (
 
 	"./blockartlib"
 	"time"
+	"strings"
+	"net"
 )
 
 var examples = map[string]string{
@@ -64,9 +66,16 @@ func readMinerAddrKey() (minerAddr string, key *ecdsa.PrivateKey, err error) {
 		err = errors.New("There are currently no miners online (according to ./keys/)")
 		return
 	}
-	filename := infos[0].Name()
-	minerAddr = filename
-	keyBytes, err := ioutil.ReadFile("./keys/" + filename)
+	var port string
+	for _, fileinfo := range infos {
+		if !strings.HasPrefix(fileinfo.Name(), ".") {
+			port = fileinfo.Name()
+			break
+		}
+	}
+	ip, err := net.ResolveTCPAddr("tcp", "localhost:" + port)
+	minerAddr = ip.String()
+	keyBytes, err := ioutil.ReadFile("./keys/" + port)
 	key, err = decodeKey(string(keyBytes))
 	return
 }
