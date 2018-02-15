@@ -34,13 +34,15 @@ import (
 	"sync"
 	"time"
 
-	"math"
-
 	"./blockartlib"
+	"math"
+	"net/http"
+	"runtime"
 )
 
-const debugLocks = false
+import _ "net/http/pprof"
 
+const debugLocks = false
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////
 //											START OF INTERFACES												 //
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -164,95 +166,63 @@ func (art MinerFromANode) GetChildren(hash string, childrenHashes *[]string) (er
 }
 
 func (m2m *MinerToMiner) FloodBlockToPeers(block *Block) (err error) {
-	//	fmt.Println("Sent", block.Nonce, block2hash(block), len(ink.neighbours))
-	//	fmt.Println(block.PrevHash, block.Nonce, block.Ops, block.MinedBy)
+	fmt.Println("Sent", block.Nonce, block2hash(block))
+//	fmt.Println(block.PrevHash, block.Nonce, block.Ops, block.MinedBy)
 	m2m.HeartbeatNeighbours()
 
-	if debugLocks {
-		log.Println("neighbourlock1 locking")
-	}
-	neighbourlock.Lock()
-	if debugLocks {
-		log.Println("neighbourlock1 locked")
-	}
+	if debugLocks { log.Println("neighbourlock1 locking") }
+	neighbourlock.RLock()
+	if debugLocks { log.Println("neighbourlock1 locked") }
 	for _, neighbour := range ink.neighbours {
 		var reply bool
 		go checkError(neighbour.Call("MinerToMiner.ReceiveBlock", &block, &reply))
 	}
-	if debugLocks {
-		log.Println("neighbourlock1 unlocking")
-	}
-	neighbourlock.Unlock()
-	if debugLocks {
-		log.Println("neighbourlock1 unlocked")
-	}
+	if debugLocks { log.Println("neighbourlock1 unlocking") }
+	neighbourlock.RUnlock()
+	if debugLocks { log.Println("neighbourlock1 unlocked") }
 	return
 }
 
 func (m2m *MinerToMiner) FloodOpToPeers(op Operation) (err error) {
-	//	fmt.Println("Sent", op.SVG, op.SVGHash.Hash, len(ink.neighbours))
-	//	fmt.Println(block.PrevHash, block.Nonce, block.Ops, block.MinedBy)
+//	fmt.Println("Sent", op.SVG, op.SVGHash.Hash, len(ink.neighbours))
+//	fmt.Println(block.PrevHash, block.Nonce, block.Ops, block.MinedBy)
 	m2m.HeartbeatNeighbours()
 
-	if debugLocks {
-		log.Println("neighbourlock1 locking")
-	}
-	neighbourlock.Lock()
-	if debugLocks {
-		log.Println("neighbourlock1 locked")
-	}
+	if debugLocks { log.Println("neighbourlock1 locking") }
+	neighbourlock.RLock()
+	if debugLocks { log.Println("neighbourlock1 locked") }
 	for _, neighbour := range ink.neighbours {
 		var reply bool
 		go checkError(neighbour.Call("MinerToMiner.ReceiveOp", &op, &reply))
 	}
-	if debugLocks {
-		log.Println("neighbourlock1 unlocking")
-	}
-	neighbourlock.Unlock()
-	if debugLocks {
-		log.Println("neighbourlock1 unlocked")
-	}
+	if debugLocks { log.Println("neighbourlock1 unlocking") }
+	neighbourlock.RUnlock()
+	if debugLocks { log.Println("neighbourlock1 unlocked") }
 	return
 }
 
 func (m2m *MinerToMiner) GetHeartbeats(incAddr string, out *string) (err error) {
-	if debugLocks {
-		log.Println("neighbourlock2 locking")
-	}
-	neighbourlock.Lock()
-	if debugLocks {
-		log.Println("neighbourlock2 locked")
-	}
+	if debugLocks { log.Println("neighbourlock2 locking") }
+	neighbourlock.RLock()
+	if debugLocks { log.Println("neighbourlock2 locked") }
 	_, ok := ink.neighbours[incAddr]
-	if debugLocks {
-		log.Println("neighbourlock2 unlocking")
-	}
-	neighbourlock.Unlock()
-	if debugLocks {
-		log.Println("neighbourlock2 unlocked")
-	}
+	if debugLocks { log.Println("neighbourlock2 unlocking") }
+	neighbourlock.RUnlock()
+	if debugLocks { log.Println("neighbourlock2 unlocked") }
 
 	if !ok {
 		//if neighbour doesn't exist
-		go func() {
+		go func () {
 			client, err := rpc.Dial("tcp", incAddr)
 			if !checkError(err) {
 				fmt.Println("added:", incAddr)
-				if debugLocks {
-					log.Println("neighbourlock3 locking")
-				}
+				if debugLocks { log.Println("neighbourlock3 locking") }
 				neighbourlock.Lock()
-				if debugLocks {
-					log.Println("neighbourlock3 locked")
-				}
+				if debugLocks { log.Println("neighbourlock3 locked") }
 				ink.neighbours[incAddr] = client
-				if debugLocks {
-					log.Println("neighbourlock3 unlocking")
-				}
+				if debugLocks { log.Println("neighbourlock3 unlocking") }
 				neighbourlock.Unlock()
-				if debugLocks {
-					log.Println("neighbourlock3 unlocked")
-				}
+				if debugLocks { log.Println("neighbourlock3 unlocked") }
 			}
 		}()
 	}
@@ -262,26 +232,18 @@ func (m2m *MinerToMiner) GetHeartbeats(incAddr string, out *string) (err error) 
 }
 
 func (m2m *MinerToMiner) FetchBlockChain(i string, blockchain *[]Block) (err error) {
-	if debugLocks {
-		fmt.Println("locking7")
-	}
-	maplock.Lock()
-	if debugLocks {
-		fmt.Println("locked7")
-	}
+    if debugLocks { fmt.Println("locking7") }
+	maplock.RLock()
+    if debugLocks { fmt.Println("locked7") }
 	v := make([]Block, 0, len(blocks))
 	for _, value := range blocks {
 		v = append(v, value)
 	}
 	*blockchain = v
 
-	if debugLocks {
-		fmt.Println("unlocking7")
-	}
-	maplock.Unlock()
-	if debugLocks {
-		fmt.Println("unlocked7")
-	}
+	if debugLocks { fmt.Println("unlocking7") }
+	maplock.RUnlock()
+	if debugLocks { fmt.Println("unlocked7") }
 	return
 }
 
@@ -298,83 +260,78 @@ func deleteUnresponsiveNeighbour(neighbourAddr string, neighbourRPC *rpc.Client)
 }
 
 func (m2m *MinerToMiner) HeartbeatNeighbours() (err error) {
-	if debugLocks {
-		log.Println("neighbourlock5 locking")
-	}
-	neighbourlock.Lock()
-	if debugLocks {
-		log.Println("neighbourlock5 locked")
-	}
+	if debugLocks { log.Println("neighbourlock5 locking") }
+	neighbourlock.RLock()
+	if debugLocks { log.Println("neighbourlock5 locked") }
 	for neighbourAddr, neighbourRPC := range ink.neighbours {
 		go deleteUnresponsiveNeighbour(neighbourAddr, neighbourRPC)
 	}
-	if debugLocks {
-		log.Println("neighbourlock5 unlocking")
-	}
-	neighbourlock.Unlock()
-	if debugLocks {
-		log.Println("neighbourlock5 unlocked")
-	}
+	if debugLocks { log.Println("neighbourlock5 unlocking") }
+	neighbourlock.RUnlock()
+	if debugLocks { log.Println("neighbourlock5 unlocked") }
 	//give neighbours time to respond
 	time.Sleep(2 * time.Second)
 	//if we have good neighbours, return
-	neighbourlock.Lock()
-	//	fmt.Println("len neighbours, minminers, neighbours: ", len(ink.neighbours), ink.settings.MinNumMinerConnections, ink.neighbours)
+	neighbourlock.RLock()
+//	fmt.Println("len neighbours, minminers, neighbours: ", len(ink.neighbours), ink.settings.MinNumMinerConnections, ink.neighbours)
 	if (len(ink.neighbours) >= int(ink.settings.MinNumMinerConnections)) || (len(ink.neighbours) == 0) {
-		neighbourlock.Unlock()
+		neighbourlock.RUnlock()
 		return
 	}
-	neighbourlock.Unlock()
+	neighbourlock.RUnlock()
 	//else we get more neighbours
 	err = miner2server.GetNodes()
 	return
 }
 
 func (m2m MinerToMiner) checkValidationOps() {
-	if debugLocks {
-		fmt.Println("locking13")
-	}
+	if debugLocks { fmt.Println("locking13") }
 	maplock.RLock()
-	if debugLocks {
-		fmt.Println("locked13")
-	}
+	if debugLocks { fmt.Println("locked13") }
 	operationsToReAdd := make([]Operation, 0)
 	blockCopies := make(map[string]Block, 0)
 	for k, v := range blocks {
 		blockCopies[k] = v
 	}
-	if debugLocks {
-		fmt.Println("unlocking13")
-	}
+	if debugLocks { fmt.Println("unlocking13") }
 	maplock.RUnlock()
-	if debugLocks {
-		fmt.Println("unlocked13")
-	}
+	if debugLocks { fmt.Println("unlocked13") }
 
-	validationMap := make(map[string]bool)
+	validationMap := make(map[string]int)
+	lengthMap := make(map[string]int)
 	for k, block := range blockCopies {
-		validationCount := uint8(ink.ValidationCount(k))
+		validationCount := ink.ValidationCount(k)
+		length := ink.Length(k)
 		for _, op := range block.Ops {
 			if ecdsa.Verify(&ink.key.PublicKey, op.SVGHash.Hash, op.SVGHash.R, op.SVGHash.S) {
-				validationMap[string(op.SVGHash.Hash)] = validationCount >= op.ValNum
+				validationMap[string(op.SVGHash.Hash)] = validationCount
+				lengthMap[string(op.SVGHash.Hash)] = length
 				fmt.Println("OP:", op.SVG, op.ValNum, validationCount)
-			} else {
-				fmt.Println("NOT", op.Owner, ink.key.PublicKey)
 			}
 		}
 	}
+	longestChainLength := ink.Length(ink.getLongestChain())
 	for {
 		if len(toValidateOpsCH) == 0 {
 			break
 		}
-		fmt.Println("HEY")
 		opToCheck := <-toValidateOpsCH
 
-		fmt.Println("LUL:", opToCheck.SVG, validationMap)
+		fmt.Println("TESTING:", opToCheck.SVG, validationMap)
+		valCount, ok := validationMap[string(opToCheck.SVGHash.Hash)]
+		length := lengthMap[string(opToCheck.SVGHash.Hash)]
 
-		if validationMap[string(opToCheck.SVGHash.Hash)] {
-			validatedOpsCH <- opToCheck
-			fmt.Println("VAL")
+		if ok {
+			if valCount >= int(opToCheck.ValNum) {
+				validatedOpsCH <- opToCheck
+				fmt.Println("VAL")
+			} else if length+valCount < longestChainLength {
+				neverValidatedOpsCH <- opToCheck
+				fmt.Println("NEVER")
+			} else {
+				operationsToReAdd = append(operationsToReAdd, opToCheck)
+				fmt.Println("OKNO")
+			}
 		} else {
 			operationsToReAdd = append(operationsToReAdd, opToCheck)
 			fmt.Println("NO")
@@ -386,8 +343,8 @@ func (m2m MinerToMiner) checkValidationOps() {
 }
 
 func (m2m *MinerToMiner) ReceiveBlock(block *Block, reply *bool) (err error) {
-	//	fmt.Println("Received", block.Nonce, block2hash(block), block2string(block))
-	//	fmt.Println(block.PrevHash, block.Nonce, block.Ops, block.MinedBy)
+	fmt.Println("Received", block.Nonce, block2hash(block))
+//	fmt.Println(block.PrevHash, block.Nonce, block.Ops, block.MinedBy)
 
 	var remoteBlock Block
 	remoteBlock = *block
@@ -492,13 +449,10 @@ func (m2s *MinerToServer) Register() (err error) {
 
 // GetNodes makes RPC GetNodes(pubKey) call, makes a call to ConnectToNeighbour for each returned addr, can return errors
 func (m2s *MinerToServer) GetNodes() (err error) {
-	if debugLocks {
-		log.Println("neighbourlock6 locking")
-	}
+	if debugLocks { log.Println("neighbourlock6 locking") }
 	neighbourlock.Lock()
-	if debugLocks {
-		log.Println("neighbourlock6 locked")
-	}
+	if debugLocks { log.Println("neighbourlock6 locked") }
+
 
 	minerAddresses := make([]net.Addr, 0)
 	err = ink.serverClient.Call("RServer.GetNodes", ink.key.PublicKey, &minerAddresses)
@@ -516,13 +470,9 @@ func (m2s *MinerToServer) GetNodes() (err error) {
 		}
 	}
 
-	if debugLocks {
-		log.Println("neighbourlock6 unlocking")
-	}
+	if debugLocks { log.Println("neighbourlock6 unlocking") }
 	neighbourlock.Unlock()
-	if debugLocks {
-		log.Println("neighbourlock6 unlocked")
-	}
+	if debugLocks { log.Println("neighbourlock6 unlocked") }
 
 	return
 }
@@ -539,21 +489,14 @@ func (m2s *MinerToServer) HeartbeatServer() (err error) {
 }
 
 func (ink IMiner) GetBlockChain() (err error) {
-	if debugLocks {
-		fmt.Println("locking9")
-	}
+    if debugLocks { fmt.Println("locking9") }
 	maplock.Lock()
-	if debugLocks {
-		fmt.Println("locked9")
-	}
+    if debugLocks { fmt.Println("locked9") }
 
-	if debugLocks {
-		log.Println("neighbourlock7 locking")
-	}
-	neighbourlock.Lock()
-	if debugLocks {
-		log.Println("neighbourlock7 locked")
-	}
+
+	if debugLocks { log.Println("neighbourlock7 locking") }
+	neighbourlock.RLock()
+	if debugLocks { log.Println("neighbourlock7 locked") }
 	for _, neighbour := range ink.neighbours {
 		blockChain := make([]Block, 0)
 		err = neighbour.Call("MinerToMiner.FetchBlockChain", "", &blockChain)
@@ -561,40 +504,24 @@ func (ink IMiner) GetBlockChain() (err error) {
 			blocks[block2hash(&block)] = block
 		}
 	}
-	if debugLocks {
-		log.Println("neighbourlock7 unlocking")
-	}
-	neighbourlock.Unlock()
-	if debugLocks {
-		log.Println("neighbourlock7 unlocked")
-	}
-	if debugLocks {
-		fmt.Println("unlocking9")
-	}
+	if debugLocks { log.Println("neighbourlock7 unlocking") }
+	neighbourlock.RUnlock()
+	if debugLocks { log.Println("neighbourlock7 unlocked") }
+	if debugLocks { fmt.Println("unlocking9") }
 	maplock.Unlock()
-	if debugLocks {
-		fmt.Println("unlocked9")
-	}
+	if debugLocks { fmt.Println("unlocked9") }
 
 	return
 }
 
 func (ink IMiner) ProcessNewBlock(b *Block, currentBlock *Block, opQueue []Operation) {
-	if debugLocks {
-		fmt.Println("locking10")
-	}
+    if debugLocks { fmt.Println("locking10") }
 	maplock.Lock()
-	if debugLocks {
-		fmt.Println("locked10")
-	}
+    if debugLocks { fmt.Println("locked10") }
 	blocks[block2hash(b)] = *b
-	if debugLocks {
-		fmt.Println("unlocking10")
-	}
+	if debugLocks { fmt.Println("unlocking10") }
 	maplock.Unlock()
-	if debugLocks {
-		fmt.Println("unlocked10")
-	}
+	if debugLocks { fmt.Println("unlocked10") }
 	longestChainHash := ink.getLongestChain()
 	*currentBlock = Block{
 		PrevHash: longestChainHash,
@@ -635,21 +562,13 @@ func (ink IMiner) ProcessNewOp(op Operation, currentBlock *Block, opQueue []Oper
 func (ink IMiner) ProcessMinedBlock(currentBlock *Block, opQueue []Operation) {
 	prevHash := block2hash(currentBlock)
 	log.Printf("found nonce = %s with hash = %s", currentBlock.Nonce, prevHash)
-	if debugLocks {
-		fmt.Println("locking")
-	}
+    if debugLocks { fmt.Println("locking") }
 	maplock.Lock()
-	if debugLocks {
-		fmt.Println("locked")
-	}
+    if debugLocks { fmt.Println("locked") }
 	blocks[prevHash] = *currentBlock
-	if debugLocks {
-		fmt.Println("unlocking")
-	}
+	if debugLocks { fmt.Println("unlocking") }
 	maplock.Unlock()
-	if debugLocks {
-		fmt.Println("unlocked")
-	}
+	if debugLocks { fmt.Println("unlocked") }
 	foundBlockCH <- *currentBlock // spit out the found block via channel
 	*currentBlock = Block{
 		PrevHash: prevHash,
@@ -693,7 +612,7 @@ func (ink IMiner) Mine() (err error) {
 					difficulty = ink.settings.PoWDifficultyOpBlock
 				}
 				currentBlock.Nonce = strconv.FormatUint(i, 10)
-				if validateNonce(&currentBlock, difficulty) {
+				if validateBlock(&currentBlock, difficulty) {
 					ink.ProcessMinedBlock(&currentBlock, opQueue)
 					opQueue = make([]Operation, 0)
 					i = 0
@@ -705,32 +624,20 @@ func (ink IMiner) Mine() (err error) {
 }
 
 func (ink IMiner) GetGenesisBlock() (genesis Block) {
-	if debugLocks {
-		fmt.Println("locking2")
-	}
+    if debugLocks { fmt.Println("locking2") }
 	maplock.RLock()
-	if debugLocks {
-		fmt.Println("locked2")
-	}
+    if debugLocks { fmt.Println("locked2") }
 	genesisBlock := blocks[ink.settings.GenesisBlockHash]
-	if debugLocks {
-		fmt.Println("unlocking2")
-	}
+	if debugLocks { fmt.Println("unlocking2") }
 	maplock.RUnlock()
-	if debugLocks {
-		fmt.Println("unlocked2")
-	}
+	if debugLocks { fmt.Println("unlocked2") }
 	return genesisBlock
 }
 
 func (ink IMiner) GetChildren(hash string) (children []Block) {
-	if debugLocks {
-		fmt.Println("locking3")
-	}
+    if debugLocks { fmt.Println("locking3") }
 	maplock.RLock()
-	if debugLocks {
-		fmt.Println("locked3")
-	}
+    if debugLocks { fmt.Println("locked3") }
 	children = make([]Block, 0)
 	for _, block := range blocks {
 		if block.PrevHash == hash {
@@ -738,24 +645,16 @@ func (ink IMiner) GetChildren(hash string) (children []Block) {
 		}
 	}
 
-	if debugLocks {
-		fmt.Println("unlocking3")
-	}
+	if debugLocks { fmt.Println("unlocking3") }
 	maplock.RUnlock()
-	if debugLocks {
-		fmt.Println("unlocked3")
-	}
+	if debugLocks { fmt.Println("unlocked3") }
 	return
 }
 
 func (ink IMiner) getBlockChainHeads() (heads []Block) {
-	if debugLocks {
-		fmt.Println("locking4")
-	}
+    if debugLocks { fmt.Println("locking4") }
 	maplock.RLock()
-	if debugLocks {
-		fmt.Println("locked4")
-	}
+    if debugLocks { fmt.Println("locked4") }
 	possibilities := make(map[string]Block)
 	for k, v := range blocks {
 		possibilities[k] = v
@@ -763,17 +662,13 @@ func (ink IMiner) getBlockChainHeads() (heads []Block) {
 	for _, block := range blocks {
 		delete(possibilities, block.PrevHash)
 	}
+	if debugLocks { fmt.Println("unlocking4") }
+	maplock.RUnlock()
+	if debugLocks { fmt.Println("unlocked4") }
 	for _, v := range possibilities {
 		heads = append(heads, v)
 	}
 
-	if debugLocks {
-		fmt.Println("unlocking4")
-	}
-	maplock.RUnlock()
-	if debugLocks {
-		fmt.Println("unlocked4")
-	}
 	return
 }
 
@@ -782,13 +677,9 @@ func (ink IMiner) Length(hash string) (len int) {
 }
 
 func (ink IMiner) LengthFromTo(from string, to string) (length int) {
-	if debugLocks {
-		fmt.Println("locking11")
-	}
+    if debugLocks { fmt.Println("locking11") }
 	maplock.RLock()
-	if debugLocks {
-		fmt.Println("locked11")
-	}
+    if debugLocks { fmt.Println("locked11") }
 	for from != to {
 		length += 1
 		block, ok := blocks[from]
@@ -798,17 +689,13 @@ func (ink IMiner) LengthFromTo(from string, to string) (length int) {
 		}
 		from = block.PrevHash
 	}
-	if debugLocks {
-		fmt.Println("unlocking11")
-	}
+	if debugLocks { fmt.Println("unlocking11") }
 	maplock.RUnlock()
-	if debugLocks {
-		fmt.Println("unlocked11")
-	}
+	if debugLocks { fmt.Println("unlocked11") }
 	return
 }
 
-func (ink IMiner) getLongestChain() (hash string) {
+func (ink IMiner) getLongestChain() (hash string){
 	longest := 0
 	hash = ink.settings.GenesisBlockHash // hash of the genesis block
 	for _, head := range ink.getBlockChainHeads() {
@@ -824,7 +711,6 @@ func (ink IMiner) getLongestChain() (hash string) {
 			}
 		}
 	}
-	log.Printf("length of longest hash %s : %d", hash, longest)
 	return
 }
 
@@ -851,9 +737,11 @@ var foundBlockCH (chan Block)
 var foundOpCH (chan Operation)
 var validatedOpsCH (chan Operation)
 var toValidateOpsCH (chan Operation)
+var neverValidatedOpsCH (chan Operation)
 
 var maplock sync.RWMutex
 var neighbourlock sync.RWMutex
+
 
 func listenForMinerToMinerRPC() net.Addr {
 	server := rpc.NewServer()
@@ -888,6 +776,7 @@ func registerGobAndCreateChannels() {
 	foundBlockCH = make(chan Block, math.MaxUint8)
 	validatedOpsCH = make(chan Operation, math.MaxUint8)
 	toValidateOpsCH = make(chan Operation, math.MaxUint8)
+	neverValidatedOpsCH = make(chan Operation, math.MaxUint8)
 
 }
 
@@ -896,7 +785,7 @@ func openRPCToServer() (client *rpc.Client, err error) {
 	return rpc.Dial("tcp", *ipPort)
 }
 
-func getGenesisBlock() Block {
+func getGenesisBlock() (Block) {
 	return Block{
 		PrevHash: ink.settings.GenesisBlockHash,
 		Nonce:    "1337",
@@ -905,6 +794,11 @@ func getGenesisBlock() Block {
 }
 
 func main() {
+	go func() {
+		log.Println(http.ListenAndServe("localhost:6060", nil))
+	}()
+	runtime.SetBlockProfileRate(1)
+
 	registerGobAndCreateChannels()
 	server, err := openRPCToServer()
 	checkError(err)
@@ -1001,92 +895,97 @@ func (m *RMiner) ReceiveNewOp(op Operation, reply *string) error {
 	}
 	newOpCH <- op
 	toValidateOpsCH <- op
+
 	for {
-		validatedOp := <-validatedOpsCH
-		if bytes.Equal(validatedOp.SVGHash.Hash, op.SVGHash.Hash) {
-			return nil
-		} else {
-			validatedOpsCH <- validatedOp
+		select {
+		case validatedOp := <- validatedOpsCH:
+			if bytes.Equal(validatedOp.SVGHash.Hash, op.SVGHash.Hash) {
+				return nil
+			} else {
+				validatedOpsCH <- validatedOp
+			}
+			case neverValidatedOp := <- neverValidatedOpsCH:
+				if bytes.Equal(neverValidatedOp.SVGHash.Hash, op.SVGHash.Hash) {
+					newOpCH <- op
+					toValidateOpsCH <- op
+				} else {
+					neverValidatedOpsCH <- neverValidatedOp
+				}
 		}
 	}
 	fmt.Println("Added op:", op.SVG)
 	return nil
 }
 
+func (m *RMiner) getInkForBlock(block Block, blockHash string) uint32 {
+	if block.MinedBy == ink.key.PublicKey {
+		allOpsValidated := true
+		validateNum := uint8(ink.ValidationCount(blockHash))
+		for _, op := range block.Ops {
+			if validateNum < op.ValNum {
+				allOpsValidated = false
+			}
+		}
+		if !allOpsValidated {
+			return 0
+		}
+		if len(block.Ops) > 0 {
+			return ink.settings.InkPerOpBlock
+		} else {
+			return ink.settings.InkPerNoOpBlock
+		}
+	}
+	return 0
+}
+
+func (m *RMiner) useInkForBlock(block Block) uint32 {
+
+	var total uint32 = 0
+	p := blockartlib.NewSVGParser()
+	for _, op := range block.Ops {
+		var err error
+		if op.Delete {
+			op, err = GetOperation(op.SVG)
+		}
+		shape, err := p.ParseXMLString(op.SVG)
+		if checkError(err) {
+			fmt.Println("cyka:", op.SVG, "-")
+			continue
+		}
+		if op.Delete {
+			total += shape.Area()
+		} else {
+			total -= shape.Area()
+		}
+	}
+	return total
+}
+
 func (m *RMiner) Ink(_unused string, reply *uint32) error {
 	longestChainHash := ink.getLongestChain()
 	fmt.Println("INKINK:", longestChainHash)
-	p := blockartlib.NewSVGParser()
 	*reply = 0
 	for longestChainHash != ink.settings.GenesisBlockHash {
-		if debugLocks {
-			log.Println("locking18")
-		}
+		if debugLocks { log.Println("locking18") }
 		maplock.RLock()
-		if debugLocks {
-			log.Println("locked18")
-		}
+		if debugLocks { log.Println("locked18") }
 		b := blocks[longestChainHash]
-		if debugLocks {
-			log.Println("unlocking18")
-		}
+		if debugLocks { log.Println("unlocking18") }
 		maplock.RUnlock()
-		if debugLocks {
-			log.Println("unlocked18")
-		}
-		if b.MinedBy == ink.key.PublicKey {
-			if len(b.Ops) > 0 {
-				*reply += ink.settings.InkPerOpBlock
-			} else {
-				*reply += ink.settings.InkPerNoOpBlock
-			}
-		}
-		for _, op := range b.Ops {
-			if op.Delete {
-				op, err := GetOperation(op.SVG)
-				shape, err := p.ParseXMLString(op.SVG)
-				if checkError(err) {
-					fmt.Println("cyka:", op.SVG, "-")
-					continue
-				}
-				*reply += shape.Area()
-			} else {
-				shape, err := p.ParseXMLString(op.SVG)
-				if checkError(err) {
-					fmt.Println("cyka:", op.SVG, "-")
-					continue
-				}
-				*reply -= shape.Area()
-			}
-		}
+		if debugLocks { log.Println("unlocked18") }
 
-		if debugLocks {
-			log.Println("locking21")
-		}
-		maplock.RLock()
-		if debugLocks {
-			log.Println("locked21")
-		}
-		longestChainHash = blocks[longestChainHash].PrevHash
-		if debugLocks {
-			log.Println("unlocking21")
-		}
-		maplock.RUnlock()
-		if debugLocks {
-			log.Println("unlocked21")
-		}
+		*reply += m.getInkForBlock(b, longestChainHash)
+		*reply += m.useInkForBlock(b)
+
+		longestChainHash = b.PrevHash
 	}
 	return nil
 }
 
 func GetOperation(shapeHash string) (op Operation, err error) {
-	if debugLocks {
-		log.Println("locking19")
-	}
+	if debugLocks { log.Println("locking19") }
 	maplock.RLock()
-	if debugLocks {
-		log.Println("locked19")
-	}
+	if debugLocks { log.Println("locked19") }
 	defer maplock.RUnlock()
 	for _, block := range blocks {
 		for _, op := range block.Ops {
@@ -1105,13 +1004,9 @@ func (m *RMiner) GetSVG(shapeHash string, reply *string) (err error) {
 }
 
 func (m *RMiner) GetShapes(blockHash string, shapeHashes *[]string) error {
-	if debugLocks {
-		log.Println("locking20")
-	}
+	if debugLocks { log.Println("locking20") }
 	maplock.RLock()
-	if debugLocks {
-		log.Println("locked20")
-	}
+	if debugLocks { log.Println("locked20") }
 	defer maplock.RUnlock()
 	for _, op := range blocks[blockHash].Ops {
 		*shapeHashes = append(*shapeHashes, string(op.SVGHash.Hash))
@@ -1146,7 +1041,7 @@ func listenForArtNodes() (err error) {
 		fmt.Println(err)
 		return
 	}
-	fmt.Printf("Artserver started. Receiving on %s\n", ink.artAddr)
+	fmt.Printf("Artserver started. Receiving on %s\n", ink.localAddr)
 	for {
 		conn, err := l.Accept()
 		if err != nil {
@@ -1185,7 +1080,7 @@ func writeMinerAddrKeyToFile() {
 	keyString, err := encodeKey(ink.key)
 	checkError(err)
 	splitAddr := strings.Split(ink.artAddr, ":")
-	filename := "./keys/" + splitAddr[len(splitAddr)-1]
+	filename := "./keys/" + splitAddr[len(splitAddr) - 1]
 	fmt.Println("Writing address", ink.artAddr, "to file")
 	err = ioutil.WriteFile(filename, []byte(keyString), 0777)
 	checkError(err)
@@ -1225,36 +1120,30 @@ func block2string(block *Block) string {
 		Check that the previous block hash points to a legal, previously generated, block.
 */
 func validateBlock(block *Block, difficulty uint8) bool {
-	if debugLocks {
-		fmt.Println("loc")
-	}
 	validNonce := validateNonce(block, difficulty)
 	validOps := validateOps(block.Ops)
 	validPrevHash := validatePrevHash(block)
-	if debugLocks {
-		fmt.Println("unloc")
+	valid := (validNonce && validOps && validPrevHash)
+	if len(block.Ops) != 0 {
+		fmt.Println(valid, block.Nonce, len(block.Ops))
 	}
-	return (validNonce && validOps && validPrevHash)
+	return valid
 }
 
 func validateNonce(block *Block, difficulty uint8) bool {
 	return strings.HasSuffix(block2hash(block), strings.Repeat("0", int(difficulty)))
 }
 
-func validatePrevHash(block *Block) bool {
-	if debugLocks {
-		fmt.Println("locking prevhash")
-	}
-	maplock.Lock()
-	_, ok := blocks[block.PrevHash]
-	maplock.Unlock()
-	if debugLocks {
-		fmt.Println("unlocking ph")
-	}
-	if ok {
+func validatePrevHash(block *Block) (ok bool) {
+	if (block.PrevHash == ink.settings.GenesisBlockHash) { // TODO: Handle the special case in a smoother way?
 		return true
 	}
-	return false
+	if debugLocks { fmt.Println("locking prevhash") }
+	maplock.RLock()
+	_, ok = blocks[block.PrevHash]
+	if debugLocks { fmt.Println("unlocking ph") }
+	maplock.RUnlock()
+	return
 }
 
 /*
@@ -1275,18 +1164,16 @@ func validateOps(ops []Operation) bool {
 
 //Returns true if all ops are correctly signed
 func validateOpSigs(ops []Operation) bool {
-	allTrue := true
 	for _, op := range ops {
 		if !ecdsa.Verify(&op.Owner, op.SVGHash.Hash, op.SVGHash.R, op.SVGHash.S) {
-			allTrue = false
+			return false
 		}
 	}
-	return allTrue
+	return true
 }
 
 //Returns true if there are -NOT- any intersections with any shapes already in blockchain
 func validateIntersections(ops []Operation) bool {
-	noIntersections := true
 	var toCheck []Operation
 	var theBlocks []Block
 
@@ -1306,19 +1193,20 @@ func validateIntersections(ops []Operation) bool {
 	}
 
 	if len(toCheck) > 0 {
-		noIntersections = checkDeletes(toCheck, theBlocks)
+		//return checkDeletes(toCheck, theBlocks)
 	}
-	return noIntersections
+	return true
 }
 
 //Returns true if there is -NOT- an identical op/opsig in blockchain
 func validateIdenticalSigs(ops []Operation) bool {
-	noIdenticalOps := true
 	var toCheck []Operation
 	var theBlocks []Block
 	for _, op := range ops {
 		//if there is same op/sig in blockchain, add it to a list to check for deletes
-		maplock.Lock()
+		if debugLocks { fmt.Println("locking40") }
+		maplock.RLock()
+		if debugLocks { fmt.Println("locked40") }
 		for _, b := range blocks {
 			for _, o := range b.Ops {
 				if bytes.Equal(o.SVGHash.Hash, op.SVGHash.Hash) {
@@ -1327,12 +1215,14 @@ func validateIdenticalSigs(ops []Operation) bool {
 				}
 			}
 		}
-		maplock.Unlock()
+		if debugLocks { fmt.Println("locking40") }
+		maplock.RUnlock()
+		if debugLocks { fmt.Println("locked40") }
 	}
 	if len(toCheck) > 0 {
-		noIdenticalOps = checkDeletes(toCheck, theBlocks)
+		return checkDeletes(toCheck, theBlocks)
 	}
-	return noIdenticalOps
+	return true
 }
 
 //for each op, check if it is deleted in a later block. If it is, return true
@@ -1353,7 +1243,9 @@ iLoop:
 					}
 				}
 			}
+			//maplock.RLock()
 			currBlock = blocks[currBlock.PrevHash]
+			//maplock.RUnlock()
 		}
 		finalBlock := blocks[currBlock.PrevHash]
 		for _, currOp := range finalBlock.Ops {
@@ -1371,9 +1263,9 @@ iLoop:
 
 }
 
+
 //Returns true if shape is in blockchain and not previously deleted and is a delete
 func validateDelete(ops []Operation) bool {
-	allPossible := true
 	tipOfChain := blocks[ink.getLongestChain()]
 	for _, op := range ops {
 		if op.Delete {
@@ -1394,7 +1286,7 @@ func validateDelete(ops []Operation) bool {
 			}
 		}
 	}
-	return allPossible
+	return true
 }
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -1410,19 +1302,20 @@ func checkError(err error) bool {
 }
 
 type DumpStruct struct {
-	Hash     string
+	Hash string
 	PrevHash string
-	Level    int
+	Level int
+	Ops int
 }
 
 //writes out block's nonce and prevhash and level
 func dumpBlockchain() {
 	var toDump []DumpStruct
 	fmt.Println("BlockChain visualizer 2000")
-	fmt.Println("in format of {[blockHash][prevHash][level]}")
+	fmt.Println("in format of {[blockHash][prevHash][level][|ops|]}")
 	for hash, block := range blocks {
 		level := ink.LengthFromTo(hash, ink.settings.GenesisBlockHash)
-		thisDump := DumpStruct{hash, block.PrevHash, level}
+		thisDump := DumpStruct { hash, block.PrevHash, level, len(block.Ops) }
 		toDump = append(toDump, thisDump)
 		//fmt.Printf("{[%v][%v][%v]}\n", hash, block.PrevHash, level)
 	}
@@ -1430,6 +1323,6 @@ func dumpBlockchain() {
 	sort.Slice(toDump, func(i, j int) bool { return toDump[i].Level < toDump[j].Level })
 
 	for _, ds := range toDump {
-		fmt.Printf("{[%v][%v][%v]}\n", ds.Hash, ds.PrevHash, ds.Level)
+		fmt.Printf("{[%v][%v][%v][%v]}\n", ds.Hash, ds.PrevHash, ds.Level, ds.Ops)
 	}
 }
