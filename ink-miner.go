@@ -1125,7 +1125,7 @@ func validateBlock(block *Block, difficulty uint8) bool {
 	validPrevHash := validatePrevHash(block)
 	valid := (validNonce && validOps && validPrevHash)
 	if len(block.Ops) != 0 {
-		//fmt.Println(valid, block.Nonce, len(block.Ops))
+		fmt.Println(valid, block.Nonce, len(block.Ops))
 	}
 	return valid
 }
