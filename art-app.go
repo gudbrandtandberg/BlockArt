@@ -23,12 +23,11 @@ import (
 	"fmt"
 	"io/ioutil"
 	"os"
-
 	"net"
 	"strings"
 	"time"
-
 	"./blockartlib"
+	"sort"
 )
 
 var examples = map[string]string{
@@ -101,6 +100,34 @@ func getBlockChain(canvas blockartlib.BACanvas) (blocks map[string][]string, cur
 	return
 }
 
+type Chain struct {
+	Length int
+	Chain []string
+}
+
+func findLongestChain(canvas blockartlib.BACanvas, blocks map[string][]string, start string) (chain Chain) {
+	// recursively find the longest chain
+	chain.Length = 1
+	chain.Chain = make([]string, 0)
+	chain.Chain = append(chain.Chain, start)
+
+	children := make([]Chain, 0)
+	for _, child := range blocks[start] {
+		result := findLongestChain(canvas, blocks, child)
+		children = append(children, result)
+	}
+
+	// sort the children by chain length
+	sort.Slice(children, func(i, j int) bool {return children[i].Length > children[j].Length})
+	if len(children) > 0 {
+		child := children[0]
+		child.Length += 1
+		child.Chain = append(chain.Chain, child.Chain...)
+		return child
+	}
+
+	return
+}
 
 func main() {
 
@@ -166,8 +193,14 @@ func main() {
 	}
 
 	blocks, last := getBlockChain(canvas)
-	fmt.Println(blocks)
+	for k, v := range(blocks) {
+		fmt.Println(k, v)
+	}
 	fmt.Println("last hash: ", last)
+
+	chain := findLongestChain(canvas, blocks, genesisHash)
+	fmt.Println(chain)
+	fmt.Println("chain length, ", chain.Length)
 
 	for {
 		ink, err := canvas.GetInk()
