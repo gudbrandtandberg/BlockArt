@@ -21,6 +21,7 @@ import (
 
 	"./blockartlib"
 	"github.com/gorilla/websocket"
+	"bytes"
 )
 
 // WebServer version of the func in art-app.go
@@ -46,6 +47,9 @@ func readMinerAddrKeyWS() (minerAddr string, key string, err error) {
 	if err != nil {
 		return
 	}
+	n := bytes.IndexByte(keyBytes, 0)
+	key = string(keyBytes[:n])
+	return
 }
 
 const (
@@ -104,6 +108,7 @@ const valNum = uint8(2)
 // opens a canvas, adds a shape, closes the canvas, then writes a
 // response to the client. Writes any errors as they appear.
 func handleDrawRequest(w http.ResponseWriter, req *http.Request) {
+	w.Header().Set("Access-Control-Allow-Origin", "*")
 	cmd := parseRequest(req)
 	key, err := decodeKey(cmd.Key)
 	if err != nil {

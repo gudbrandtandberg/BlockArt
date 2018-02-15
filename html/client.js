@@ -1,5 +1,6 @@
 window.onload = function(){
-    var exampleSocket = new WebSocket("ws://127.0.0.1:8080/registerws")
+    var uri = "ws://" + window.location.hostname + "/registerws"
+    var exampleSocket = new WebSocket(uri)
     exampleSocket.onmessage = receiveBlock
     document.getElementById("canvas").addEventListener("click", clickedCanvas)
     document.addEventListener('keypress', keyPressed)
@@ -110,7 +111,8 @@ function submitDrawRequest() {
      post(request)
 }
 function post(shape) {
-    fetch("http://localhost:8080/draw",
+    var uri = "http://" + window.location.hostname + "/draw"
+    fetch(uri,
             {method: "POST",
             body: JSON.stringify(shape)},
         ).then(function(res){ res.text().then(function(data){
