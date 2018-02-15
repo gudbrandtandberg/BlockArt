@@ -23,6 +23,7 @@ import (
 	"github.com/gorilla/websocket"
 )
 
+// WebServer version of the func in art-app.go
 func readMinerAddrKeyWS() (minerAddr string, key string, err error) {
 	infos, err := ioutil.ReadDir("keys")
 	if err != nil {
@@ -45,9 +46,7 @@ func readMinerAddrKeyWS() (minerAddr string, key string, err error) {
 	if err != nil {
 		return
 	}
-	return port, string(keyBytes), err
-	//key, err = decodeKey(string(keyBytes))
-	return
+	return ":" + port, string(keyBytes), err
 }
 
 const (
