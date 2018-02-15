@@ -1041,7 +1041,7 @@ func listenForArtNodes() (err error) {
 		fmt.Println(err)
 		return
 	}
-	fmt.Printf("Artserver started. Receiving on %s\n", ink.localAddr)
+	fmt.Printf("Artserver started. Receiving on %s\n", ink.artAddr)
 	for {
 		conn, err := l.Accept()
 		if err != nil {
