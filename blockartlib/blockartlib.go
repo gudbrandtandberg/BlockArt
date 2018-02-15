@@ -173,7 +173,7 @@ type Canvas interface {
 //
 // Can return the following errors:
 // - DisconnectedError
-func OpenCanvas(minerAddr string, privKey ecdsa.PrivateKey) (canvas Canvas, setting CanvasSettings, err error) {
+func OpenCanvas(minerAddr string, privKey ecdsa.PrivateKey) (canvas BACanvas, setting CanvasSettings, err error) {
 	gob.Register(ecdsa.PrivateKey{})
 	gob.Register(&elliptic.CurveParams{})
 	gob.Register(Operation{})

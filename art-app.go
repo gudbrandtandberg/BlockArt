@@ -23,12 +23,11 @@ import (
 	"fmt"
 	"io/ioutil"
 	"os"
-
 	"net"
 	"strings"
 	"time"
-
 	"./blockartlib"
+	"sort"
 )
 
 var examples = map[string]string{
@@ -81,6 +80,52 @@ func readMinerAddrKey() (minerAddr string, key *ecdsa.PrivateKey, err error) {
 		return
 	}
 	key, err = decodeKey(string(keyBytes))
+	return
+}
+
+func getBlockChain(canvas blockartlib.BACanvas) (blocks map[string][]string, cur string) {
+	blocks = make(map[string][]string)
+	queue := make([]string, 0)
+	cur, err := canvas.GetGenesisBlock()
+	checkError(err)
+	queue = append(queue, cur)
+	for len(queue) > 0 {
+		cur = queue[0]
+		children, err := canvas.GetChildren(cur)
+		checkError(err)
+		blocks[cur] = children
+		queue = append(queue[1:], children...)
+	}
+
+	return
+}
+
+type Chain struct {
+	Length int
+	Chain []string
+}
+
+func findLongestChain(canvas blockartlib.BACanvas, blocks map[string][]string, start string) (chain Chain) {
+	// recursively find the longest chain
+	chain.Length = 1
+	chain.Chain = make([]string, 0)
+	chain.Chain = append(chain.Chain, start)
+
+	children := make([]Chain, 0)
+	for _, child := range blocks[start] {
+		result := findLongestChain(canvas, blocks, child)
+		children = append(children, result)
+	}
+
+	// sort the children by chain length
+	sort.Slice(children, func(i, j int) bool {return children[i].Length > children[j].Length})
+	if len(children) > 0 {
+		child := children[0]
+		child.Length += 1
+		child.Chain = append(chain.Chain, child.Chain...)
+		return child
+	}
+
 	return
 }
 
@@ -146,6 +191,16 @@ func main() {
 	if checkError(err) != nil {
 		return
 	}
+
+	blocks, last := getBlockChain(canvas)
+	for k, v := range(blocks) {
+		fmt.Println(k, v)
+	}
+	fmt.Println("last hash: ", last)
+
+	chain := findLongestChain(canvas, blocks, genesisHash)
+	fmt.Println(chain)
+	fmt.Println("chain length, ", chain.Length)
 
 	for {
 		ink, err := canvas.GetInk()
