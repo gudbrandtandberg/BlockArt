@@ -17,6 +17,7 @@ import (
 	"log"
 	"net"
 	"net/http"
+	"strings"
 
 	"./blockartlib"
 	"github.com/gorilla/websocket"
@@ -31,10 +32,21 @@ func readMinerAddrKeyWS() (minerAddr string, key string, err error) {
 		err = errors.New("There are currently no miners online (according to ./keys/)")
 		return
 	}
-	filename := infos[0].Name()
-	minerAddr = filename
-	keyBytes, err := ioutil.ReadFile("./keys/" + filename)
-	key = string(keyBytes)
+	var port string
+	for _, fileinfo := range infos {
+		if !strings.HasPrefix(fileinfo.Name(), ".") {
+			port = fileinfo.Name()
+			break
+		}
+	}
+	ip, err := net.ResolveTCPAddr("tcp", "localhost:"+port)
+	minerAddr = ip.String()
+	keyBytes, err := ioutil.ReadFile("./keys/" + port)
+	if err != nil {
+		return
+	}
+	return port, string(keyBytes), err
+	//key, err = decodeKey(string(keyBytes))
 	return
 }
 
@@ -103,7 +115,7 @@ func handleDrawRequest(w http.ResponseWriter, req *http.Request) {
 
 	fmt.Println("Will now submit draw command to a miner!")
 	response := DrawResponse{}
-	canvas, settings, err := blockartlib.OpenCanvas(cmd.Addr, *key)
+	canvas, settings, err := blockartlib.OpenCanvas(":"+cmd.Addr, *key)
 	if err != nil {
 		response.Status = err.Error()
 		writeResponse(w, response)

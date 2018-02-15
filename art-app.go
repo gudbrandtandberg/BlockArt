@@ -24,10 +24,11 @@ import (
 	"io/ioutil"
 	"os"
 
-	"./blockartlib"
-	"time"
-	"strings"
 	"net"
+	"strings"
+	"time"
+
+	"./blockartlib"
 )
 
 var examples = map[string]string{
@@ -73,9 +74,12 @@ func readMinerAddrKey() (minerAddr string, key *ecdsa.PrivateKey, err error) {
 			break
 		}
 	}
-	ip, err := net.ResolveTCPAddr("tcp", "localhost:" + port)
+	ip, err := net.ResolveTCPAddr("tcp", "localhost:"+port)
 	minerAddr = ip.String()
 	keyBytes, err := ioutil.ReadFile("./keys/" + port)
+	if err != nil {
+		return
+	}
 	key, err = decodeKey(string(keyBytes))
 	return
 }
