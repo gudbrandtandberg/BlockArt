@@ -21,7 +21,7 @@ import (
 
 	"./blockartlib"
 	"github.com/gorilla/websocket"
-	"bytes"
+	"html"
 )
 
 // WebServer version of the func in art-app.go
@@ -47,9 +47,7 @@ func readMinerAddrKeyWS() (minerAddr string, key string, err error) {
 	if err != nil {
 		return
 	}
-	n := bytes.IndexByte(keyBytes, 0)
-	key = string(keyBytes[:n])
-	return
+	return port, string(keyBytes), err
 }
 
 const (
@@ -110,7 +108,8 @@ const valNum = uint8(2)
 func handleDrawRequest(w http.ResponseWriter, req *http.Request) {
 	w.Header().Set("Access-Control-Allow-Origin", "*")
 	cmd := parseRequest(req)
-	key, err := decodeKey(cmd.Key)
+	var err error = nil
+	//key, err := decodeKey(cmd.Key)
 	if err != nil {
 		fmt.Println(err)
 		return
@@ -118,12 +117,12 @@ func handleDrawRequest(w http.ResponseWriter, req *http.Request) {
 
 	fmt.Println("Will now submit draw command to a miner!")
 	response := DrawResponse{}
-	canvas, settings, err := blockartlib.OpenCanvas(":"+cmd.Addr, *key)
-	if err != nil {
-		response.Status = err.Error()
-		writeResponse(w, response)
-		return
-	}
+	//canvas, settings, err := blockartlib.OpenCanvas(":"+cmd.Addr, *key)
+	//if err != nil {
+	//	response.Status = err.Error()
+	//	writeResponse(w, response)
+	//	return
+	//}
 	response.CanvasX = settings.CanvasXMax
 	response.CanvasY = settings.CanvasYMax
 
@@ -134,13 +133,13 @@ func handleDrawRequest(w http.ResponseWriter, req *http.Request) {
 		writeResponse(w, response)
 		return
 	}
-	ink, err := canvas.CloseCanvas()
-	if err != nil {
-		response.Status = err.Error()
-		writeResponse(w, response)
-		return
-	}
-	response.InkRemaining = ink
+	//ink, err := canvas.CloseCanvas()
+	//if err != nil {
+	//	response.Status = err.Error()
+	//	writeResponse(w, response)
+	//	return
+	//}
+	//response.InkRemaining = ink
 	response.Status = "OK"
 	writeResponse(w, response)
 }
@@ -234,16 +233,31 @@ func listenForNewBlocks(ch chan []byte) {
 	}
 }
 
+var canvas blockartlib.BACanvas
+var settings blockartlib.CanvasSettings
+
 // serve main webpage and listen for / issue new drawing commands to the canvas
 func main() {
-	newBlockCh := make(chan []byte)
-	go listenForNewBlocks(newBlockCh)
-	go broadcastNewBlocks(newBlockCh)
+	addr, keystring, err := readMinerAddrKeyWS()
+	if err != nil {
+		log.Println("failed read")
+	}
+	key, err := decodeKey(keystring)
+	if err != nil {
+		log.Println("failed decode")
+	}
+	canvas, settings, err = blockartlib.OpenCanvas(":"+addr, *key)
+	if err != nil {
+		log.Println("failed opencanvas")
+	}
 
 	http.Handle("/", http.FileServer(http.Dir("./html/"))) // for serving 'client.js'
 	http.Handle("/home", http.HandlerFunc(serveIndex))
 	http.Handle("/draw", http.HandlerFunc(handleDrawRequest))
 	http.Handle("/registerws", http.HandlerFunc(registerWebsocket))
+	http.HandleFunc("/bar", func(w http.ResponseWriter, r *http.Request) {
+		fmt.Fprintf(w, "Hello, %q", html.EscapeString(r.URL.Path))
+	})
 
 	fmt.Println("Starting server...")
 	log.Fatal(http.ListenAndServe(":8080", nil))
