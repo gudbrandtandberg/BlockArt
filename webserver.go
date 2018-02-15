@@ -17,9 +17,8 @@ import (
 	"log"
 	"net"
 	"net/http"
-
+	"sort"
 	"./blockartlib"
-	"github.com/gorilla/websocket"
 )
 
 func readMinerAddrKeyWS() (minerAddr string, key string, err error) {
@@ -219,6 +218,82 @@ func listenForNewBlocks(ch chan []byte) {
 	}
 }
 
+func handleChainRequest(w http.ResponseWriter, r *http.Request) {
+	blocks, last := getBlockChain(canvas)
+	for k, v := range(blocks) {
+		fmt.Println(k, v)
+	}
+	fmt.Println("last hash: ", last)
+
+	genesisHash, err := canvas.GetGenesisBlock()
+	if err != nil {
+
+	}
+	//chain := findLongestChain(canvas, blocks, genesisHash)
+	//fmt.Println(chain)
+	//fmt.Println("chain length, ", chain.Length)
+	type data struct {
+		Genesis string
+		Blocks map[string][]string
+	}
+	d := data{genesisHash, blocks}
+	resp, err := json.Marshal(d)
+	w.Write(resp)
+}
+
+func getBlockChain(canvas blockartlib.BACanvas) (blocks map[string][]string, cur string) {
+	blocks = make(map[string][]string)
+	queue := make([]string, 0)
+	cur, err := canvas.GetGenesisBlock()
+	if err != nil {
+		return
+	}
+	queue = append(queue, cur)
+	for len(queue) > 0 {
+		cur = queue[0]
+		children, err := canvas.GetChildren(cur)
+		if err != nil {
+			return
+		}
+		blocks[cur] = children
+		queue = append(queue[1:], children...)
+	}
+
+	return
+}
+
+type Chain struct {
+	Length int
+	Chain []string
+}
+
+func findLongestChain(canvas blockartlib.BACanvas, blocks map[string][]string, start string) (chain Chain) {
+	// recursively find the longest chain
+	chain.Length = 1
+	chain.Chain = make([]string, 0)
+	chain.Chain = append(chain.Chain, start)
+
+	children := make([]Chain, 0)
+	for _, child := range blocks[start] {
+		result := findLongestChain(canvas, blocks, child)
+		children = append(children, result)
+	}
+
+	// sort the children by chain length
+	sort.Slice(children, func(i, j int) bool {return children[i].Length > children[j].Length})
+	if len(children) > 0 {
+		child := children[0]
+		child.Length += 1
+		child.Chain = append(chain.Chain, child.Chain...)
+		return child
+	}
+
+	return
+}
+
+var canvas blockartlib.BACanvas
+var settings blockartlib.CanvasSettings
+
 // serve main webpage and listen for / issue new drawing commands to the canvas
 func main() {
 	newBlockCh := make(chan []byte)
@@ -229,6 +304,7 @@ func main() {
 	http.Handle("/home", http.HandlerFunc(serveIndex))
 	http.Handle("/draw", http.HandlerFunc(handleDrawRequest))
 	http.Handle("/registerws", http.HandlerFunc(registerWebsocket))
+	http.Handle("/blocks", http.HandlerFunc(handleChainRequest))
 
 	fmt.Println("Starting server...")
 	log.Fatal(http.ListenAndServe(":8080", nil))
