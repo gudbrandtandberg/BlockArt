@@ -17,11 +17,13 @@ import (
 	"log"
 	"net"
 	"net/http"
+	"strings"
 
 	"./blockartlib"
 	"github.com/gorilla/websocket"
 )
 
+// WebServer version of the func in art-app.go
 func readMinerAddrKeyWS() (minerAddr string, key string, err error) {
 	infos, err := ioutil.ReadDir("keys")
 	if err != nil {
@@ -31,11 +33,17 @@ func readMinerAddrKeyWS() (minerAddr string, key string, err error) {
 		err = errors.New("There are currently no miners online (according to ./keys/)")
 		return
 	}
-	filename := infos[0].Name()
-	minerAddr = filename
-	keyBytes, err := ioutil.ReadFile("./keys/" + filename)
-	key = string(keyBytes)
-	return
+	var port string
+	for _, fileinfo := range infos {
+		if !strings.HasPrefix(fileinfo.Name(), ".") {
+			port = fileinfo.Name()
+			break
+		}
+	}
+	ip, err := net.ResolveTCPAddr("tcp", "localhost:"+port)
+	minerAddr = ip.String()
+	keyBytes, err := ioutil.ReadFile("./keys/" + port)
+	return ":" + port, string(keyBytes), err
 }
 
 const (
