@@ -84,6 +84,24 @@ func readMinerAddrKey() (minerAddr string, key *ecdsa.PrivateKey, err error) {
 	return
 }
 
+func getBlockChain(canvas blockartlib.BACanvas) (blocks map[string][]string, cur string) {
+	blocks = make(map[string][]string)
+	queue := make([]string, 0)
+	cur, err := canvas.GetGenesisBlock()
+	checkError(err)
+	queue = append(queue, cur)
+	for len(queue) > 0 {
+		cur = queue[0]
+		children, err := canvas.GetChildren(cur)
+		checkError(err)
+		blocks[cur] = children
+		queue = append(queue[1:], children...)
+	}
+
+	return
+}
+
+
 func main() {
 
 	// testParser()
@@ -146,6 +164,10 @@ func main() {
 	if checkError(err) != nil {
 		return
 	}
+
+	blocks, last := getBlockChain(canvas)
+	fmt.Println(blocks)
+	fmt.Println("last hash: ", last)
 
 	for {
 		ink, err := canvas.GetInk()
