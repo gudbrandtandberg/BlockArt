@@ -293,30 +293,36 @@ func (m2m MinerToMiner) checkValidationOps() {
 	maplock.RUnlock()
 	if debugLocks { fmt.Println("unlocked13") }
 
-	validationMap := make(map[string]bool)
+	validationMap := make(map[string]int)
+	lengthMap := make(map[string]int)
 	for k, block := range blockCopies {
-		validationCount := uint8(ink.ValidationCount(k))
+		validationCount := ink.ValidationCount(k)
+		length := ink.Length(k)
 		for _, op := range block.Ops {
 			if ecdsa.Verify(&ink.key.PublicKey, op.SVGHash.Hash, op.SVGHash.R, op.SVGHash.S) {
-				validationMap[string(op.SVGHash.Hash)] = validationCount >= op.ValNum
+				validationMap[string(op.SVGHash.Hash)] = validationCount
+				lengthMap[string(op.SVGHash.Hash)] = length
 				fmt.Println("OP:", op.SVG, op.ValNum, validationCount)
-			} else {
-				fmt.Println("NOT", op.Owner, ink.key.PublicKey)
 			}
 		}
 	}
+	longestChainLength := ink.Length(ink.getLongestChain())
 	for {
 		if len(toValidateOpsCH) == 0 {
 			break
 		}
-		fmt.Println("HEY")
 		opToCheck := <-toValidateOpsCH
 
-		fmt.Println("LUL:", opToCheck.SVG, validationMap)
+		fmt.Println("TESTING:", opToCheck.SVG, validationMap)
+		valCount := validationMap[string(opToCheck.SVGHash.Hash)]
+		length := lengthMap[string(opToCheck.SVGHash.Hash)]
 
-		if validationMap[string(opToCheck.SVGHash.Hash)] {
+		if valCount >= int(opToCheck.ValNum) {
 			validatedOpsCH <- opToCheck
 			fmt.Println("VAL")
+		} else if length + valCount < longestChainLength {
+			neverValidatedOpsCH <- opToCheck
+			fmt.Println("NEVER")
 		} else {
 			operationsToReAdd = append(operationsToReAdd, opToCheck)
 			fmt.Println("NO")
@@ -723,6 +729,7 @@ var foundBlockCH (chan Block)
 var foundOpCH (chan Operation)
 var validatedOpsCH (chan Operation)
 var toValidateOpsCH (chan Operation)
+var neverValidatedOpsCH (chan Operation)
 
 var maplock sync.RWMutex
 var neighbourlock sync.RWMutex
@@ -761,6 +768,7 @@ func registerGobAndCreateChannels() {
 	foundBlockCH = make(chan Block, math.MaxUint8)
 	validatedOpsCH = make(chan Operation, math.MaxUint8)
 	toValidateOpsCH = make(chan Operation, math.MaxUint8)
+	neverValidatedOpsCH = make(chan Operation, math.MaxUint8)
 
 }
 
@@ -874,22 +882,75 @@ func (m *RMiner) ReceiveNewOp(op Operation, reply *string) error {
 	}
 	newOpCH <- op
 	toValidateOpsCH <- op
+
 	for {
-		validatedOp := <- validatedOpsCH
-		if bytes.Equal(validatedOp.SVGHash.Hash, op.SVGHash.Hash) {
-			return nil
-		} else {
-			validatedOpsCH <- validatedOp
+		select {
+		case validatedOp := <- validatedOpsCH:
+			if bytes.Equal(validatedOp.SVGHash.Hash, op.SVGHash.Hash) {
+				return nil
+			} else {
+				validatedOpsCH <- validatedOp
+			}
+			case neverValidatedOp := <- neverValidatedOpsCH:
+				if bytes.Equal(neverValidatedOp.SVGHash.Hash, op.SVGHash.Hash) {
+					newOpCH <- op
+					toValidateOpsCH <- op
+				} else {
+					neverValidatedOpsCH <- neverValidatedOp
+				}
 		}
 	}
 	fmt.Println("Added op:", op.SVG)
 	return nil
 }
 
+func (m *RMiner) getInkForBlock(block Block, blockHash string) uint32 {
+	if block.MinedBy == ink.key.PublicKey {
+		allOpsValidated := true
+		validateNum := uint8(ink.ValidationCount(blockHash))
+		for _, op := range block.Ops {
+			if validateNum < op.ValNum {
+				allOpsValidated = false
+			}
+		}
+		if !allOpsValidated {
+			return 0
+		}
+		if len(block.Ops) > 0 {
+			return ink.settings.InkPerOpBlock
+		} else {
+			return ink.settings.InkPerNoOpBlock
+		}
+	}
+	return 0
+}
+
+func (m *RMiner) useInkForBlock(block Block) uint32 {
+
+	var total uint32 = 0
+	p := blockartlib.NewSVGParser()
+	for _, op := range block.Ops {
+		var err error
+		if op.Delete {
+			op, err = GetOperation(op.SVG)
+		}
+		shape, err := p.ParseXMLString(op.SVG)
+		if checkError(err) {
+			fmt.Println("cyka:", op.SVG, "-")
+			continue
+		}
+		if op.Delete {
+			total += shape.Area()
+		} else {
+			total -= shape.Area()
+		}
+	}
+	return total
+}
+
 func (m *RMiner) Ink(_unused string, reply *uint32) error {
 	longestChainHash := ink.getLongestChain()
 	fmt.Println("INKINK:", longestChainHash)
-	p := blockartlib.NewSVGParser()
 	*reply = 0
 	for longestChainHash != ink.settings.GenesisBlockHash {
 		if debugLocks { log.Println("locking18") }
@@ -899,39 +960,11 @@ func (m *RMiner) Ink(_unused string, reply *uint32) error {
 		if debugLocks { log.Println("unlocking18") }
 		maplock.RUnlock()
 		if debugLocks { log.Println("unlocked18") }
-		if b.MinedBy == ink.key.PublicKey {
-			if len(b.Ops) > 0 {
-				*reply += ink.settings.InkPerOpBlock
-			} else {
-				*reply += ink.settings.InkPerNoOpBlock
-			}
-		}
-		for _, op := range b.Ops {
-			if op.Delete{
-				op, err := GetOperation(op.SVG)
-				shape, err := p.ParseXMLString(op.SVG)
-				if checkError(err) {
-					fmt.Println("cyka:", op.SVG, "-")
-					continue
-				}
-				*reply += shape.Area()
-			} else {
-				shape, err := p.ParseXMLString(op.SVG)
-				if checkError(err) {
-					fmt.Println("cyka:", op.SVG, "-")
-					continue
-				}
-				*reply -= shape.Area()
-			}
-		}
 
-		if debugLocks { log.Println("locking21") }
-		maplock.RLock()
-		if debugLocks { log.Println("locked21") }
-		longestChainHash = blocks[longestChainHash].PrevHash
-		if debugLocks { log.Println("unlocking21") }
-		maplock.RUnlock()
-		if debugLocks { log.Println("unlocked21") }
+		*reply += m.getInkForBlock(b, longestChainHash)
+		*reply += m.useInkForBlock(b)
+
+		longestChainHash = b.PrevHash
 	}
 	return nil
 }
@@ -1194,7 +1227,9 @@ iLoop:
 					}
 				}
 			}
+			maplock.RLock()
 			currBlock = blocks[currBlock.PrevHash]
+			maplock.RUnlock()
 		}
 		finalBlock := blocks[currBlock.PrevHash]
 		for _, currOp := range finalBlock.Ops {
