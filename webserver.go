@@ -46,7 +46,6 @@ func readMinerAddrKeyWS() (minerAddr string, key string, err error) {
 	if err != nil {
 		return
 	}
-	return ":" + port, string(keyBytes), err
 }
 
 const (
