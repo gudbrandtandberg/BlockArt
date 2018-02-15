@@ -18,6 +18,8 @@ import (
 	"net/http"
 	"sort"
 	"./blockartlib"
+	"strings"
+	"net"
 )
 
 func readMinerAddrKeyWS() (minerAddr string, key string, err error) {
@@ -29,11 +31,20 @@ func readMinerAddrKeyWS() (minerAddr string, key string, err error) {
 		err = errors.New("There are currently no miners online (according to ./keys/)")
 		return
 	}
-	filename := infos[0].Name()
-	minerAddr = filename
-	keyBytes, err := ioutil.ReadFile("./keys/" + filename)
-	key = string(keyBytes)
-	return
+	var port string
+	for _, fileinfo := range infos {
+		if !strings.HasPrefix(fileinfo.Name(), ".") {
+			port = fileinfo.Name()
+			break
+		}
+	}
+	ip, err := net.ResolveTCPAddr("tcp", "localhost:"+port)
+	minerAddr = ip.String()
+	keyBytes, err := ioutil.ReadFile("./keys/" + port)
+	if err != nil {
+		return
+	}
+	return port, string(keyBytes), err
 }
 
 const (
@@ -93,7 +104,8 @@ const valNum = uint8(2)
 // response to the client. Writes any errors as they appear.
 func handleDrawRequest(w http.ResponseWriter, req *http.Request) {
 	cmd := parseRequest(req)
-	key, err := decodeKey(cmd.Key)
+	var err error = nil
+	//key, err := decodeKey(cmd.Key)
 	if err != nil {
 		fmt.Println(err)
 		return
@@ -101,12 +113,12 @@ func handleDrawRequest(w http.ResponseWriter, req *http.Request) {
 
 	fmt.Println("Will now submit draw command to a miner!")
 	response := DrawResponse{}
-	canvas, settings, err := blockartlib.OpenCanvas(cmd.Addr, *key)
-	if err != nil {
-		response.Status = err.Error()
-		writeResponse(w, response)
-		return
-	}
+	//canvas, settings, err := blockartlib.OpenCanvas(":"+cmd.Addr, *key)
+	//if err != nil {
+	//	response.Status = err.Error()
+	//	writeResponse(w, response)
+	//	return
+	//}
 	response.CanvasX = settings.CanvasXMax
 	response.CanvasY = settings.CanvasYMax
 
@@ -117,13 +129,13 @@ func handleDrawRequest(w http.ResponseWriter, req *http.Request) {
 		writeResponse(w, response)
 		return
 	}
-	ink, err := canvas.CloseCanvas()
-	if err != nil {
-		response.Status = err.Error()
-		writeResponse(w, response)
-		return
-	}
-	response.InkRemaining = ink
+	//ink, err := canvas.CloseCanvas()
+	//if err != nil {
+	//	response.Status = err.Error()
+	//	writeResponse(w, response)
+	//	return
+	//}
+	//response.InkRemaining = ink
 	response.Status = "OK"
 	writeResponse(w, response)
 }
@@ -327,9 +339,21 @@ var settings blockartlib.CanvasSettings
 
 // serve main webpage and listen for / issue new drawing commands to the canvas
 func main() {
-	newBlockCh := make(chan []byte)
+	//newBlockCh := make(chan []byte)
 	//go listenForNewBlocks(newBlockCh)
 	//go broadcastNewBlocks(newBlockCh)
+	addr, keystring, err := readMinerAddrKeyWS()
+	if err != nil {
+		log.Println("failed read")
+	}
+	key, err := decodeKey(keystring)
+	if err != nil {
+		log.Println("failed decode")
+	}
+	canvas, settings, err = blockartlib.OpenCanvas(":"+addr, *key)
+	if err != nil {
+		log.Println("failed opencanvas")
+	}
 
 	http.Handle("/", http.FileServer(http.Dir("./html/"))) // for serving 'client.js'
 	http.Handle("/home", http.HandlerFunc(serveIndex))
