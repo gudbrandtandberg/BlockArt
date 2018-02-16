@@ -233,26 +233,26 @@ func listenForNewBlocks(ch chan []byte) {
 */
 
 func handleChainRequest(w http.ResponseWriter, r *http.Request) {
-	blocks, _ := getBlockChain(canvas)
+	blocks, longestHash := getBlockChain(canvas)
 	/*for k, v := range(blocks) {
 		fmt.Println(k, v)
 	}
 	fmt.Println("last hash: ", last)*/
 
-	//genesisHash, err := canvas.GetGenesisBlock()
+	genesisHash, err := canvas.GetGenesisBlock()
 	//if err != nil {
 	//
 	//}
 	////chain := findLongestChain(canvas, blocks, genesisHash)
 	////fmt.Println(chain)
 	////fmt.Println("chain length, ", chain.Length)
-	//type data struct {
-	//	Genesis string
-	//	LongestChain string
-	//	Blocks map[string][]string
-	//}
-	//d := data{genesisHash, longestHash, blocks}
-	resp, err := json.Marshal(blocks)
+	type data struct {
+		Genesis string
+		LongestChain string
+		Blocks map[string][]string
+	}
+	d := data{genesisHash, longestHash, blocks}
+	resp, err := json.Marshal(d)
 	if err != nil {
 		fmt.Println(err)
 	}

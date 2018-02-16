@@ -154,49 +154,35 @@ function drawInput() {
 function getBlockChain() {
     var uri = "http://" + window.location.hostname + ":8080/blocks"
     fetch(uri).then(function(response) {
-        console.log("response")
-        console.log(response)
         return response.json()
     }).then(function(data) {
-        var nodes = [];
-        var edges = [];
-        for (var key in data) {
-            nodes.push({
-                id: key,
-                label: key
-            });
-            var block = data[key];
-            for (var child in block) {
-                edges.push({
-                    from: key,
-                    to: child
-                })
+        var current = data.Genesis;
+        var queue = [];
+        queue.push({id: current, parentId: ""});
+        var flattened = [];
+        while (queue.length > 0) {
+            var block = queue.shift();
+            var children = data.Blocks[block.id];
+            if (children != null) {
+                for (var i = 0; i < children.length; i++) {
+                    queue.push({id: children[i], parentId: block.id});
+                }
             }
+            flattened.push(block);
         }
-        draw({nodes: nodes, edges: edges})
+
+        var root = d3.stratify()(flattened);
+        console.log(root);
+        var tree = d3.tree();
+        tree.size([1000, 1000]);
+        tree(root);
+        console.log(tree)
+
+        // TODO: make this work
     });
 }
 
-var network = null;
-
-function destroy() {
-    if (network !== null) {
-        network.destroy();
-        network = null;
-    }
-}
-
-function draw(data) {
-    destroy();
-
-    // create a network
-    var container = document.getElementById('mynetwork');
-    var options = {
-        layout: {
-            hierarchical: {
-                direction: "UD"
-            }
-        }
-    };
-    network = new vis.Network(container, data, options);
-}
+var svg = d3.select("#tree").append("svg")
+    .attr("width", 1000)
+    .attr("height", 1000);
+var g = svg.append("g");
