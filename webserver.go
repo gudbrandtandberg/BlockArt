@@ -247,6 +247,31 @@ func handleChainRequest(w http.ResponseWriter, r *http.Request) {
 	w.Write(resp)
 }
 
+func handleShapesRequest(w http.ResponseWriter, r *http.Request) {
+	blocks, _ := getBlockChain(canvas)
+	genesis, err := canvas.GetGenesisBlock()
+	if err != nil {
+		fmt.Println(err)
+	}
+	longestChain := findLongestChain(canvas, blocks, genesis)
+	shapes := make([]string, 0)
+	for _, block := range(longestChain.Chain) {
+		shapeHashes, err := canvas.GetShapes(block)
+		if err != nil {
+			fmt.Println(err)
+		}
+		for _, hash := range(shapeHashes) {
+			shape, err := canvas.GetSvgString(hash)
+			if err != nil {
+				fmt.Println(err)
+			}
+			shapes = append(shapes, shape)
+		}
+	}
+	resp, err := json.Marshal(shapes)
+	w.Write(resp)
+}
+
 func getBlockChain(canvas blockartlib.BACanvas) (blocks map[string][]string, cur string) {
 	blocks = make(map[string][]string)
 	queue := make([]string, 0)
@@ -303,14 +328,15 @@ var settings blockartlib.CanvasSettings
 // serve main webpage and listen for / issue new drawing commands to the canvas
 func main() {
 	newBlockCh := make(chan []byte)
-	go listenForNewBlocks(newBlockCh)
-	go broadcastNewBlocks(newBlockCh)
+	//go listenForNewBlocks(newBlockCh)
+	//go broadcastNewBlocks(newBlockCh)
 
 	http.Handle("/", http.FileServer(http.Dir("./html/"))) // for serving 'client.js'
 	http.Handle("/home", http.HandlerFunc(serveIndex))
 	http.Handle("/draw", http.HandlerFunc(handleDrawRequest))
 	// http.Handle("/registerws", http.HandlerFunc(registerWebsocket))
 	http.Handle("/blocks", http.HandlerFunc(handleChainRequest))
+	http.Handle("/shapes", http.HandlerFunc(handleShapesRequest))
 
 	fmt.Println("Starting server...")
 	log.Fatal(http.ListenAndServe(":8080", nil))
