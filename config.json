@@ -7,8 +7,8 @@
     "ink-per-op-block": 100,
     "ink-per-no-op-block": 50,
     "heartbeat": 100,
-    "pow-difficulty-op-block": 5,
-    "pow-difficulty-no-op-block": 5,
+    "pow-difficulty-op-block": 3,
+    "pow-difficulty-no-op-block": 4,
     "canvas-settings": {
       "canvas-x-max": 1024,
       "canvas-y-max": 1024
