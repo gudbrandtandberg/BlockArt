@@ -1,11 +1,12 @@
 window.onload = function(){
-    var uri = "ws://" + window.location.hostname + "/registerws"
-    var exampleSocket = new WebSocket(uri)
-    exampleSocket.onmessage = receiveBlock
+    // var uri = "ws://" + window.location.hostname + "/registerws"
+    // var exampleSocket = new WebSocket(uri)
+    // exampleSocket.onmessage = receiveBlock
     document.getElementById("canvas").addEventListener("click", clickedCanvas)
     document.addEventListener('keypress', keyPressed)
     scaleCanvas()
     sizeKeyTA()
+    getBlockChain()
 }
 function sizeKeyTA() {
     document.getElementById("keyTA").style.height = document.getElementById("keyTA").scrollHeight+'px';
@@ -152,4 +153,54 @@ function drawInput() {
         ctx.stroke()
         ctx.fill()
     }
+}
+
+function getBlockChain() {
+    var uri = "http://" + window.location.hostname + ":8080/blocks"
+    fetch(uri).then(function(response) {
+        console.log("response")
+        console.log(response)
+        return response.json()
+    }).then(function(data) {
+        var nodes = [];
+        var edges = [];
+        for (var key in data) {
+            nodes.push({
+                id: key,
+                label: key
+            });
+            var block = data[key];
+            for (var child in block) {
+                edges.push({
+                    from: key,
+                    to: child
+                })
+            }
+        }
+        draw({nodes: nodes, edges: edges})
+    });
+}
+
+var network = null;
+
+function destroy() {
+    if (network !== null) {
+        network.destroy();
+        network = null;
+    }
+}
+
+function draw(data) {
+    destroy();
+
+    // create a network
+    var container = document.getElementById('mynetwork');
+    var options = {
+        layout: {
+            hierarchical: {
+                direction: "UD"
+            }
+        }
+    };
+    network = new vis.Network(container, data, options);
 }

@@ -18,10 +18,9 @@ import (
 	"net"
 	"net/http"
 	"strings"
-	"./blockartlib"
-	"github.com/gorilla/websocket"
 	"sort"
 	"html"
+	"./blockartlib"
 )
 
 // WebServer version of the func in art-app.go
@@ -189,6 +188,7 @@ func parseShapeType(shapeType string) blockartlib.ShapeType {
 	}
 }
 
+/*
 var upgrader = websocket.Upgrader{CheckOrigin: func(r *http.Request) bool { return true }}
 var c *websocket.Conn // global ws-conn variable
 
@@ -201,6 +201,7 @@ func registerWebsocket(w http.ResponseWriter, r *http.Request) {
 	c = conn
 	fmt.Println("Websocket connection to client set up")
 }
+
 
 func broadcastNewBlocks(ch chan []byte) {
 	for {
@@ -232,27 +233,32 @@ func listenForNewBlocks(ch chan []byte) {
 		ch <- buffer
 	}
 }
+*/
 
 func handleChainRequest(w http.ResponseWriter, r *http.Request) {
-	blocks, last := getBlockChain(canvas)
-	for k, v := range(blocks) {
+	blocks, _ := getBlockChain(canvas)
+	/*for k, v := range(blocks) {
 		fmt.Println(k, v)
 	}
-	fmt.Println("last hash: ", last)
+	fmt.Println("last hash: ", last)*/
 
-	genesisHash, err := canvas.GetGenesisBlock()
+	//genesisHash, err := canvas.GetGenesisBlock()
+	//if err != nil {
+	//
+	//}
+	////chain := findLongestChain(canvas, blocks, genesisHash)
+	////fmt.Println(chain)
+	////fmt.Println("chain length, ", chain.Length)
+	//type data struct {
+	//	Genesis string
+	//	LongestChain string
+	//	Blocks map[string][]string
+	//}
+	//d := data{genesisHash, longestHash, blocks}
+	resp, err := json.Marshal(blocks)
 	if err != nil {
-
+		fmt.Println(err)
 	}
-	//chain := findLongestChain(canvas, blocks, genesisHash)
-	//fmt.Println(chain)
-	//fmt.Println("chain length, ", chain.Length)
-	type data struct {
-		Genesis string
-		Blocks map[string][]string
-	}
-	d := data{genesisHash, blocks}
-	resp, err := json.Marshal(d)
 	w.Write(resp)
 }
 
@@ -327,7 +333,7 @@ func main() {
 	http.Handle("/", http.FileServer(http.Dir("./html/"))) // for serving 'client.js'
 	http.Handle("/home", http.HandlerFunc(serveIndex))
 	http.Handle("/draw", http.HandlerFunc(handleDrawRequest))
-	http.Handle("/registerws", http.HandlerFunc(registerWebsocket))
+	// http.Handle("/registerws", http.HandlerFunc(registerWebsocket))
 	http.Handle("/blocks", http.HandlerFunc(handleChainRequest))
 	http.HandleFunc("/bar", func(w http.ResponseWriter, r *http.Request) {
 		fmt.Fprintf(w, "Hello, %q", html.EscapeString(r.URL.Path))
