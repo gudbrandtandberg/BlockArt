@@ -622,7 +622,7 @@ func (ink IMiner) Mine() (err error) {
 
 			default:
 				i++
-				if i % 500 == 0  && len(currentBlock.Ops) > 0{
+				if i % 500 == 0  && len(currentBlock.Ops) > 0 {
 					fmt.Println(i, currentBlock.PrevHash, block2hash(&currentBlock), len(currentBlock.Ops))
 				}
 				if len(currentBlock.Ops) == 0 {

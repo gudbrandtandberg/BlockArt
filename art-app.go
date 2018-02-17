@@ -57,7 +57,7 @@ func decodeKey(hexStr string) (key *ecdsa.PrivateKey, err error) {
 	return x509.ParseECPrivateKey(keyBytes)
 }
 
-func readMinerAddrKey(addr string) (minerAddr string, key *ecdsa.PrivateKey, err error) {
+func readMinerAddrKey(minerAddr string) (key *ecdsa.PrivateKey, err error) {
 	infos, err := ioutil.ReadDir("keys")
 	if err != nil {
 		return
@@ -66,15 +66,10 @@ func readMinerAddrKey(addr string) (minerAddr string, key *ecdsa.PrivateKey, err
 		err = errors.New("There are currently no miners online (according to ./keys/)")
 		return
 	}
-	var port string
-	for _, fileinfo := range infos {
-		if !strings.HasPrefix(fileinfo.Name(), ".") {
-			port = fileinfo.Name()
-			break
-		}
-	}
-	ip, err := net.ResolveTCPAddr("tcp", addr)
-	minerAddr = ip.String()
+
+	splits := strings.Split(minerAddr, ":")
+	port := splits[len(splits)-1]
+	_, err = net.ResolveTCPAddr("tcp", minerAddr)
 	keyBytes, err := ioutil.ReadFile("./keys/" + port)
 	if err != nil {
 		return
@@ -135,7 +130,7 @@ func main() {
 		os.Exit(1)
 	}
 	var err error
-	addr := os.Args[1]
+	minerAddr := os.Args[1]
 
 	// testParser()
 	// return
@@ -143,7 +138,7 @@ func main() {
 	// curve := elliptic.P384()
 	// privKey, err := ecdsa.GenerateKey(curve, rand.Reader)
 
-	minerAddr, privKey, err := readMinerAddrKey(addr)
+	privKey, err := readMinerAddrKey(minerAddr)
 	if checkError(err) != nil {
 		return
 	}
@@ -154,10 +149,10 @@ func main() {
 		return
 	}
 
-	validateNum := uint8(4)
+	validateNum := uint8(2)
 
 	// Add a line.
-	shapeHash, _, _, err := canvas.AddShape(validateNum, blockartlib.PATH, "M 0 0 L 0 5", "transparent", "red")
+	shapeHash, _, _, err := canvas.AddShape(validateNum, blockartlib.PATH, "M 10 10 L 50 50 L 100 100 L 150 200", "transparent", "red")
 	if checkError(err) != nil {
 		return
 	}
@@ -192,8 +187,8 @@ func main() {
 
 	// Delete a shape
 
-	//fmt.Println("Will delete", shapeHash)
-	//_, err = canvas.DeleteShape(validateNum, shapeHash)
+	fmt.Println("Will delete", shapeHash)
+	_, err = canvas.DeleteShape(validateNum, shapeHash)
 	if checkError(err) != nil {
 		return
 	}

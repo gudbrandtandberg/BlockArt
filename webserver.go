@@ -23,8 +23,9 @@ import (
 	"os"
 )
 
+var minerAddr string
 // WebServer version of the func in art-app.go
-func readMinerAddrKeyWS() (minerAddr string, key string, err error) {
+func readMinerAddrKeyWS(minerAddr string) (key string, err error) {
 	infos, err := ioutil.ReadDir("keys")
 	if err != nil {
 		return
@@ -33,21 +34,15 @@ func readMinerAddrKeyWS() (minerAddr string, key string, err error) {
 		err = errors.New("There are currently no miners online (according to ./keys/)")
 		return
 	}
-	var port string
-	for _, fileinfo := range infos {
-		if !strings.HasPrefix(fileinfo.Name(), ".") {
-			port = fileinfo.Name()
-			break
-		}
-	}
-	ip, err := net.ResolveTCPAddr("tcp", "localhost:"+port)
-	minerAddr = ip.String()
+	splits := strings.Split(minerAddr, ":")
+	port := splits[len(splits)-1]
+	_, err = net.ResolveTCPAddr("tcp", minerAddr)
 	keyBytes, err := ioutil.ReadFile("./keys/" + port)
 	if err != nil {
 		return
 	}
 
-	return port, string(keyBytes), err
+	return string(keyBytes), err
 }
 
 const (
@@ -64,7 +59,7 @@ func serveIndex(w http.ResponseWriter, req *http.Request) {
 	fmt.Println("Serving index")
 	w.Header().Set("Access-Control-Allow-Origin", "*")
 
-	minerAddr, key, err := readMinerAddrKeyWS()
+	key, err := readMinerAddrKeyWS(minerAddr)
 	if err != nil {
 		w.Write([]byte(err.Error()))
 		return
@@ -328,11 +323,11 @@ func main() {
 		os.Exit(1)
 	}
 	var err error
-	minerAddr := os.Args[1]
+	minerAddr = os.Args[1]
 	//newBlockCh := make(chan []byte)
 	//go listenForNewBlocks(newBlockCh)
 	//go broadcastNewBlocks(newBlockCh)
-	_, keystring, err := readMinerAddrKeyWS()
+	keystring, err := readMinerAddrKeyWS(minerAddr)
 	if err != nil {
 		log.Println("failed read")
 	}
