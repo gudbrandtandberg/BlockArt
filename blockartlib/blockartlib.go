@@ -243,11 +243,13 @@ func (c BACanvas) AddShape(validateNum uint8, shapeType ShapeType, shapeSvgStrin
 	}
 
 	// local checks done, send op to miner
-	var op Operation
-	op.Delete = false
-	op.Owner = c.privKey.PublicKey
-	op.SVG = shape.XMLString()
-	op.SVGHash = signShapeString(op.SVG, &c.privKey)
+	op := Operation{
+		Delete: false,
+		Owner: c.privKey.PublicKey,
+		SVG: shape.XMLString(),
+		SVGHash: signShapeString(shape.XMLString(), &c.privKey),
+		ValNum: validateNum,
+	}
 	shapeHash = hex.EncodeToString(op.SVGHash.Hash)
 
 	err = minerClient.Call("RMiner.ReceiveNewOp", op, nil)

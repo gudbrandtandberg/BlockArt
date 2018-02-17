@@ -99,7 +99,7 @@ func main() {
 		return
 	}
 
-	validateNum := uint8(4)
+	validateNum := uint8(10)
 
 	// Add a line.
 	shapeHash, _, _, err := canvas.AddShape(validateNum, blockartlib.PATH, "M 0 0 L 0 5", "transparent", "red")
