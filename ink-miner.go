@@ -306,7 +306,6 @@ func (m2m MinerToMiner) checkValidationOps() {
 			if ecdsa.Verify(&ink.key.PublicKey, op.SVGHash.Hash, op.SVGHash.R, op.SVGHash.S) {
 				validationMap[string(op.SVGHash.Hash)] = validationCount
 				lengthMap[string(op.SVGHash.Hash)] = length
-				fmt.Println("OP:", op.SVG, op.ValNum, validationCount)
 			}
 		}
 	}
@@ -317,17 +316,17 @@ func (m2m MinerToMiner) checkValidationOps() {
 		}
 		opToCheck := <-toValidateOpsCH
 
-//		fmt.Println("TESTING:", opToCheck.SVG, validationMap)
+		fmt.Println("TESTING:", opToCheck.SVG, validationMap)
 		valCount, ok := validationMap[string(opToCheck.SVGHash.Hash)]
 		length := lengthMap[string(opToCheck.SVGHash.Hash)]
 
 		if ok {
 			if valCount >= int(opToCheck.ValNum) {
 				validatedOpsCH <- opToCheck
-				fmt.Println("VAL")
-			} else if length+valCount < longestChainLength {
+				fmt.Println("VAL", valCount, opToCheck.ValNum)
+			} else if length+valCount < longestChainLength + 1 {
 				neverValidatedOpsCH <- opToCheck
-				//fmt.Println("NEVER")
+				fmt.Println("NEVER", valCount, opToCheck.ValNum, length)
 			} else {
 				operationsToReAdd = append(operationsToReAdd, opToCheck)
 				//fmt.Println("OKNO")
@@ -343,7 +342,7 @@ func (m2m MinerToMiner) checkValidationOps() {
 }
 
 func (m2m *MinerToMiner) ReceiveBlock(block *Block, reply *bool) (err error) {
-	fmt.Println("Received", block.Nonce, block2hash(block))
+//	fmt.Println("Received", block.Nonce, block2hash(block))
 //	fmt.Println(block.PrevHash, block.Nonce, block.Ops, block.MinedBy)
 
 	var remoteBlock Block
@@ -374,12 +373,11 @@ func (m2m *MinerToMiner) ReceiveBlock(block *Block, reply *bool) (err error) {
 //			log.Printf("validated nonce = %s from block = %s", remoteBlock.Nonce, hash)
 			newBlockCH <- remoteBlock
 
-			m2m.checkValidationOps()
-
-			// reflood block
-			foundBlockCH <- remoteBlock
+//			m2m.checkValidationOps()
 		}
 	}
+	// reflood block
+	foundBlockCH <- remoteBlock
 	return
 }
 
@@ -523,7 +521,7 @@ func (ink IMiner) ProcessNewBlock(b *Block, currentBlock *Block, opQueue []Opera
 	maplock.Unlock()
 	if debugLocks { fmt.Println("unlocked10") }
 	longestChainHash := ink.getLongestChain()
-	fmt.Println("Switching from:", ink.Length(currentBlock.PrevHash), "to:", ink.Length(longestChainHash))
+//	fmt.Println("Switching from:", ink.Length(currentBlock.PrevHash), "to:", ink.Length(longestChainHash))
 	for _, o := range currentBlock.Ops {
 		isMined := false
 		for _, mined := range b.Ops {
@@ -548,38 +546,27 @@ func (ink IMiner) ProcessNewOp(op Operation, currentBlock *Block, opQueue []Oper
 	for _, o := range opQueue {
 		if bytes.Equal(op.SVGHash.Hash, o.SVGHash.Hash) {
 			exists = true
-			fmt.Println("EXISTS")
+			fmt.Println("EXISTS in queue")
 		}
 	}
 	for _, o := range currentBlock.Ops {
 		if bytes.Equal(op.SVGHash.Hash, o.SVGHash.Hash) {
 			exists = true
-			fmt.Println("EXISTS")
+			fmt.Println("EXISTS in block")
 		}
 	}
 	if !exists {
-		opQueue = append(opQueue, op)
-		fmt.Println("CYAK")
-		validQueue := validateOps(opQueue)
-		fmt.Println("CYAK2")
-		if !validQueue {
-			fmt.Println("NOTVALID", len(opQueue))
-			if len(opQueue) == 1 {
-				opQueue = make([]Operation, 0)
-			} else {
-				opQueue = opQueue[:len(opQueue)-2]
-			}
+		var newOps []Operation
+		newOps = append(currentBlock.Ops, opQueue...)
+		if validateOps(append(newOps, op)) {
+			currentBlock.Ops = append(newOps, op)
+		} else {
+			currentBlock.Ops = newOps
 		}
-		fmt.Println("asd")
-
 		var m2m MinerToMiner
 		m2m.FloodOpToPeers(op)
-		fmt.Println("qwerew")
 	}
 
-	fmt.Println("HMMMM", exists)
-
-	currentBlock.Ops = append(currentBlock.Ops, opQueue...)
 	//This is how the miner actually handles the new op when it is handed it through a channel by an RPC call from art node OR a flood from neighbour
 }
 
@@ -599,8 +586,8 @@ func (ink IMiner) ProcessMinedBlock(currentBlock *Block, opQueue []Operation) {
 		MinedBy:  ink.key.PublicKey,
 		Ops:      opQueue,
 	}
-	var m2m MinerToMiner
-	m2m.checkValidationOps()
+//	var m2m MinerToMiner
+//	m2m.checkValidationOps()
 }
 
 func (ink IMiner) Mine() (err error) {
@@ -631,8 +618,8 @@ func (ink IMiner) Mine() (err error) {
 
 			default:
 				i++
-				if i % 100 == 0 && len(currentBlock.Ops) > 0 {
-					//fmt.Println(i, currentBlock.PrevHash, block2hash(&currentBlock), len(currentBlock.Ops))
+				if i % 10000 == 0 {
+					fmt.Println(i, currentBlock.PrevHash, block2hash(&currentBlock), len(currentBlock.Ops))
 				}
 				difficulty := ink.settings.PoWDifficultyNoOpBlock
 				if len(currentBlock.Ops) != 0 {
@@ -869,6 +856,14 @@ func main() {
 	// Heartbeat your neighbours s.t. you know when you get some.
 	checkError(miner2miner.HeartbeatNeighbours())
 
+	go func() {
+		for {
+			var m2m MinerToMiner
+			m2m.checkValidationOps()
+			time.Sleep(time.Second)
+		}
+	}()
+
 	c := make(chan os.Signal, 1)
 	signal.Notify(c, os.Interrupt)
 	for _ = range c {
@@ -929,16 +924,15 @@ func (m *RMiner) ReceiveNewOp(op Operation, reply *string) error {
 			if bytes.Equal(validatedOp.SVGHash.Hash, op.SVGHash.Hash) {
 				return nil
 			} else {
-//				time.Sleep(time.Millisecond * 500)
-//				validatedOpsCH <- validatedOp
+				validatedOpsCH <- validatedOp
 			}
 		case neverValidatedOp := <- neverValidatedOpsCH:
 			if bytes.Equal(neverValidatedOp.SVGHash.Hash, op.SVGHash.Hash) {
+				fmt.Println("READDDED OP")
 				newOpCH <- op
 				toValidateOpsCH <- op
 			} else {
-//				time.Sleep(time.Millisecond * 500)
-//				neverValidatedOpsCH <- neverValidatedOp
+				neverValidatedOpsCH <- neverValidatedOp
 			}
 		}
 	}
@@ -1153,9 +1147,6 @@ func validateBlock(block *Block, difficulty uint8) bool {
 	validOps := validateOps(block.Ops)
 	validPrevHash := validatePrevHash(block)
 	valid := (validNonce && validOps && validPrevHash)
-	if i, _ := strconv.Atoi(block.Nonce); i % 100 == 0 && len(block.Ops) > 0 {
-		fmt.Println(valid, validNonce, validOps, validPrevHash, block.Nonce, len(block.Ops))
-	}
 	return valid
 }
 
@@ -1188,7 +1179,6 @@ func validateOps(ops []Operation) bool {
 	intersections := validateIntersections(ops)
 	identicalSignatures := validateIdenticalSigs(ops)
 	validDelete := validateDelete(ops)
-
 	return (opSignatures && intersections && identicalSignatures && validDelete)
 }
 
@@ -1209,12 +1199,12 @@ func validateIntersections(ops []Operation) bool {
 
 	//for each op in block, for each block in bc, for each op in block of bc, check if xmlstring of op1 intersections with op2
 	for _, op := range ops {
-		for _, bl := range blocks {
-			for _, blOp := range bl.Ops {
+		for _, block := range blocks {
+			for _, blOp := range block.Ops {
 				if blockartlib.XMLStringsIntersect(op.SVG, blOp.SVG) {
 					//check if intersecting op was deleted later. if it was then it's fine if not return false
 					toCheck = append(toCheck, blOp)
-					theBlocks = append(theBlocks, bl)
+					theBlocks = append(theBlocks, block)
 					//if same shape is added and deleted multiple times, this still works
 				}
 				//else if they do not intersect move on to next op in block of blockchain
@@ -1230,24 +1220,29 @@ func validateIntersections(ops []Operation) bool {
 
 //Returns true if there is -NOT- an identical op/opsig in the longest chain
 func validateIdenticalSigs(ops []Operation) bool {
-	for _, op := range ops {
-		//if there is same op/sig in blockchain, add it to a list to check for deletes
-		if debugLocks { fmt.Println("locking40") }
-//		maplock.RLock()
-		if debugLocks { fmt.Println("locked40") }
-		tipOfChain := blocks[ink.getLongestChain()]
+	usedSigs := make(map[string]bool)
 
-		for tipOfChain.PrevHash != ink.settings.GenesisBlockHash {
-			for _, o := range tipOfChain.Ops {
-				if bytes.Equal(o.SVGHash.Hash, op.SVGHash.Hash) {
-					return false
-				}
-			}
-			tipOfChain = blocks[tipOfChain.PrevHash]
+	if debugLocks { fmt.Println("locking40") }
+//	maplock.RLock() // TODO: Causes a deadlock
+	if debugLocks { fmt.Println("locked40") }
+	tipOfChain := blocks[ink.getLongestChain()]
+	if tipOfChain.PrevHash == "" { // Means that there is no blockchain yet
+		return true
+	}
+	for tipOfChain.PrevHash != ink.settings.GenesisBlockHash {
+		for _, o := range tipOfChain.Ops {
+			usedSigs[string(o.SVGHash.Hash)] = true
 		}
-		if debugLocks { fmt.Println("locking40") }
-//		maplock.RUnlock()
-		if debugLocks { fmt.Println("locked40") }
+		tipOfChain = blocks[tipOfChain.PrevHash]
+	}
+	if debugLocks { fmt.Println("locking40") }
+//	maplock.RUnlock()
+	if debugLocks { fmt.Println("locked40") }
+
+	for _, op := range ops {
+		if usedSigs[string(op.SVGHash.Hash)] {
+			return false
+		}
 	}
 	return true
 }
@@ -1258,6 +1253,7 @@ func checkDeletes(ops []Operation, blox []Block) bool {
 
 iLoop:
 	for i := 0; i < len(ops); i++ {
+
 		thisOp := ops[i]
 		thisBlock := blox[i]
 		currBlock := tipOfChain
@@ -1270,9 +1266,9 @@ iLoop:
 					}
 				}
 			}
-			//maplock.RLock()
+			maplock.RLock()
 			currBlock = blocks[currBlock.PrevHash]
-			//maplock.RUnlock()
+			maplock.RUnlock()
 		}
 		finalBlock := blocks[currBlock.PrevHash]
 		for _, currOp := range finalBlock.Ops {
