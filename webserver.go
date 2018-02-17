@@ -15,13 +15,11 @@ import (
 	"html/template"
 	"io/ioutil"
 	"log"
-	"net"
 	"net/http"
-	"strings"
-
+	"sort"
 	"./blockartlib"
-	"github.com/gorilla/websocket"
-	"bytes"
+	"strings"
+	"net"
 )
 
 // WebServer version of the func in art-app.go
@@ -47,9 +45,8 @@ func readMinerAddrKeyWS() (minerAddr string, key string, err error) {
 	if err != nil {
 		return
 	}
-	n := bytes.IndexByte(keyBytes, 0)
-	key = string(keyBytes[:n])
-	return
+
+	return port, string(keyBytes), err
 }
 
 const (
@@ -110,7 +107,8 @@ const valNum = uint8(2)
 func handleDrawRequest(w http.ResponseWriter, req *http.Request) {
 	w.Header().Set("Access-Control-Allow-Origin", "*")
 	cmd := parseRequest(req)
-	key, err := decodeKey(cmd.Key)
+	var err error = nil
+	//key, err := decodeKey(cmd.Key)
 	if err != nil {
 		fmt.Println(err)
 		return
@@ -118,12 +116,7 @@ func handleDrawRequest(w http.ResponseWriter, req *http.Request) {
 
 	fmt.Println("Will now submit draw command to a miner!")
 	response := DrawResponse{}
-	canvas, settings, err := blockartlib.OpenCanvas(":"+cmd.Addr, *key)
-	if err != nil {
-		response.Status = err.Error()
-		writeResponse(w, response)
-		return
-	}
+
 	response.CanvasX = settings.CanvasXMax
 	response.CanvasY = settings.CanvasYMax
 
@@ -134,13 +127,7 @@ func handleDrawRequest(w http.ResponseWriter, req *http.Request) {
 		writeResponse(w, response)
 		return
 	}
-	ink, err := canvas.CloseCanvas()
-	if err != nil {
-		response.Status = err.Error()
-		writeResponse(w, response)
-		return
-	}
-	response.InkRemaining = ink
+
 	response.Status = "OK"
 	writeResponse(w, response)
 }
@@ -190,6 +177,7 @@ func parseShapeType(shapeType string) blockartlib.ShapeType {
 	}
 }
 
+/*
 var upgrader = websocket.Upgrader{CheckOrigin: func(r *http.Request) bool { return true }}
 var c *websocket.Conn // global ws-conn variable
 
@@ -202,6 +190,7 @@ func registerWebsocket(w http.ResponseWriter, r *http.Request) {
 	c = conn
 	fmt.Println("Websocket connection to client set up")
 }
+
 
 func broadcastNewBlocks(ch chan []byte) {
 	for {
@@ -233,17 +222,128 @@ func listenForNewBlocks(ch chan []byte) {
 		ch <- buffer
 	}
 }
+*/
+
+func handleChainRequest(w http.ResponseWriter, r *http.Request) {
+	blocks, longestHash := getBlockChain(canvas)
+
+	genesisHash, err := canvas.GetGenesisBlock()
+
+	type data struct {
+		Genesis string
+		LongestChain string
+		Blocks map[string][]string
+	}
+	d := data{genesisHash, longestHash, blocks}
+	resp, err := json.Marshal(d)
+	if err != nil {
+		fmt.Println(err)
+	}
+	w.Write(resp)
+}
+
+func handleShapesRequest(w http.ResponseWriter, r *http.Request) {
+	blocks, _ := getBlockChain(canvas)
+	genesis, err := canvas.GetGenesisBlock()
+	if err != nil {
+		fmt.Println(err)
+	}
+	longestChain := findLongestChain(canvas, blocks, genesis)
+	shapes := make([]string, 0)
+	for _, block := range(longestChain.Chain) {
+		shapeHashes, err := canvas.GetShapes(block)
+		if err != nil {
+			fmt.Println(err)
+		}
+		for _, hash := range(shapeHashes) {
+			shape, err := canvas.GetSvgString(hash)
+			if err != nil {
+				fmt.Println(err)
+			}
+			shapes = append(shapes, shape)
+		}
+	}
+	resp, err := json.Marshal(shapes)
+	w.Write(resp)
+}
+
+func getBlockChain(canvas blockartlib.BACanvas) (blocks map[string][]string, cur string) {
+	blocks = make(map[string][]string)
+	queue := make([]string, 0)
+	cur, err := canvas.GetGenesisBlock()
+	if err != nil {
+		return
+	}
+	queue = append(queue, cur)
+	for len(queue) > 0 {
+		cur = queue[0]
+		children, err := canvas.GetChildren(cur)
+		if err != nil {
+			return
+		}
+		blocks[cur] = children
+		queue = append(queue[1:], children...)
+	}
+
+	return
+}
+
+type Chain struct {
+	Length int
+	Chain []string
+}
+
+func findLongestChain(canvas blockartlib.BACanvas, blocks map[string][]string, start string) (chain Chain) {
+	// recursively find the longest chain
+	chain.Length = 1
+	chain.Chain = make([]string, 0)
+	chain.Chain = append(chain.Chain, start)
+
+	children := make([]Chain, 0)
+	for _, child := range blocks[start] {
+		result := findLongestChain(canvas, blocks, child)
+		children = append(children, result)
+	}
+
+	// sort the children by chain length
+	sort.Slice(children, func(i, j int) bool {return children[i].Length > children[j].Length})
+	if len(children) > 0 {
+		child := children[0]
+		child.Length += 1
+		child.Chain = append(chain.Chain, child.Chain...)
+		return child
+	}
+
+	return
+}
+
+var canvas blockartlib.BACanvas
+var settings blockartlib.CanvasSettings
 
 // serve main webpage and listen for / issue new drawing commands to the canvas
 func main() {
-	newBlockCh := make(chan []byte)
-	go listenForNewBlocks(newBlockCh)
-	go broadcastNewBlocks(newBlockCh)
+	//newBlockCh := make(chan []byte)
+	//go listenForNewBlocks(newBlockCh)
+	//go broadcastNewBlocks(newBlockCh)
+	addr, keystring, err := readMinerAddrKeyWS()
+	if err != nil {
+		log.Println("failed read")
+	}
+	key, err := decodeKey(keystring)
+	if err != nil {
+		log.Println("failed decode")
+	}
+	canvas, settings, err = blockartlib.OpenCanvas(":"+addr, *key)
+	if err != nil {
+		log.Println("failed opencanvas")
+	}
 
 	http.Handle("/", http.FileServer(http.Dir("./html/"))) // for serving 'client.js'
 	http.Handle("/home", http.HandlerFunc(serveIndex))
 	http.Handle("/draw", http.HandlerFunc(handleDrawRequest))
-	http.Handle("/registerws", http.HandlerFunc(registerWebsocket))
+	// http.Handle("/registerws", http.HandlerFunc(registerWebsocket))
+	http.Handle("/blocks", http.HandlerFunc(handleChainRequest))
+	http.Handle("/shapes", http.HandlerFunc(handleShapesRequest))
 
 	fmt.Println("Starting server...")
 	log.Fatal(http.ListenAndServe(":8080", nil))
