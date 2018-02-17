@@ -184,7 +184,7 @@ func (m2m *MinerToMiner) FloodBlockToPeers(block *Block) (err error) {
 }
 
 func (m2m *MinerToMiner) FloodOpToPeers(op Operation) (err error) {
-	fmt.Println("FLOODOP", op.SVG, op.SVGHash.Hash, len(ink.neighbours))
+//	fmt.Println("FLOODOP", op.SVG, op.SVGHash.Hash, len(ink.neighbours))
 //	fmt.Println(block.PrevHash, block.Nonce, block.Ops, block.MinedBy)
 	m2m.HeartbeatNeighbours()
 
@@ -299,17 +299,22 @@ func (m2m MinerToMiner) checkValidationOps() {
 
 	validationMap := make(map[string]int)
 	lengthMap := make(map[string]int)
-	for k, block := range blockCopies {
-		validationCount := ink.ValidationCount(k)
-		length := ink.Length(k)
-		for _, op := range block.Ops {
+	longestChainHash := ink.getLongestChain()
+	tipOfChain := blockCopies[longestChainHash]
+	longestChainLength := ink.Length(longestChainHash)
+	length := longestChainLength
+	valCount := 0
+	for tipOfChain.PrevHash != ink.settings.GenesisBlockHash {
+		for _, op := range tipOfChain.Ops {
 			if ecdsa.Verify(&ink.key.PublicKey, op.SVGHash.Hash, op.SVGHash.R, op.SVGHash.S) {
-				validationMap[string(op.SVGHash.Hash)] = validationCount
+				validationMap[string(op.SVGHash.Hash)] = valCount
 				lengthMap[string(op.SVGHash.Hash)] = length
 			}
 		}
+		length -= 1
+		valCount += 1
+		tipOfChain = blockCopies[tipOfChain.PrevHash]
 	}
-	longestChainLength := ink.Length(ink.getLongestChain())
 	for {
 		if len(toValidateOpsCH) == 0 {
 			break
@@ -323,8 +328,8 @@ func (m2m MinerToMiner) checkValidationOps() {
 		if ok {
 			if valCount >= int(opToCheck.ValNum) {
 				validatedOpsCH <- opToCheck
-				fmt.Println("VAL", valCount, opToCheck.ValNum)
-			} else if length+valCount < longestChainLength + 1 {
+				fmt.Println("VAL", valCount, length, opToCheck.ValNum)
+			} else if length+valCount < longestChainLength {
 				neverValidatedOpsCH <- opToCheck
 				fmt.Println("NEVER", valCount, opToCheck.ValNum, length)
 			} else {
@@ -611,7 +616,6 @@ func (ink IMiner) Mine() (err error) {
 				i = 0
 
 			case o := <-newOpCH:
-				fmt.Println("GOT NEW OP")
 				ink.ProcessNewOp(o, &currentBlock, opQueue)
 				opQueue = make([]Operation, 0)
 				i = 0
@@ -1198,18 +1202,23 @@ func validateIntersections(ops []Operation) bool {
 	var theBlocks []Block
 
 	//for each op in block, for each block in bc, for each op in block of bc, check if xmlstring of op1 intersections with op2
-	for _, op := range ops {
-		for _, block := range blocks {
-			for _, blOp := range block.Ops {
+	tipOfChain := blocks[ink.getLongestChain()]
+	if tipOfChain.PrevHash == "" { // Means that there is no blockchain yet
+		return true
+	}
+	for tipOfChain.PrevHash != ink.settings.GenesisBlockHash {
+		for _, op := range ops {
+			for _, blOp := range tipOfChain.Ops {
 				if blockartlib.XMLStringsIntersect(op.SVG, blOp.SVG) {
 					//check if intersecting op was deleted later. if it was then it's fine if not return false
 					toCheck = append(toCheck, blOp)
-					theBlocks = append(theBlocks, block)
+					theBlocks = append(theBlocks, tipOfChain)
 					//if same shape is added and deleted multiple times, this still works
 				}
 				//else if they do not intersect move on to next op in block of blockchain
 			}
 		}
+		tipOfChain = blocks[tipOfChain.PrevHash]
 	}
 
 	if len(toCheck) > 0 {
