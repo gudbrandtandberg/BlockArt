@@ -36,8 +36,6 @@ import (
 
 	"./blockartlib"
 	"math"
-	"net/http"
-	"runtime"
 )
 
 import _ "net/http/pprof"
@@ -322,7 +320,7 @@ func (m2m MinerToMiner) checkValidationOps() {
 		}
 		opToCheck := <-toValidateOpsCH
 
-		fmt.Println("TESTING:", opToCheck.SVG, validationMap)
+		//fmt.Println("TESTING:", opToCheck.SVG, validationMap)
 		valCount, ok := validationMap[string(opToCheck.SVGHash.Hash)]
 		length := lengthMap[string(opToCheck.SVGHash.Hash)]
 
@@ -352,15 +350,14 @@ func (m2m *MinerToMiner) ReceiveBlock(block *Block, reply *bool) (err error) {
 		fmt.Println("Received", block.Nonce, block2hash(block))
 	}
 //	fmt.Println(block.PrevHash, block.Nonce, block.Ops, block.MinedBy)
-
 	var remoteBlock Block
 	remoteBlock = *block
 	difficulty := ink.settings.PoWDifficultyNoOpBlock
 	if len(block.Ops) != 0 {
 		difficulty = ink.settings.PoWDifficultyOpBlock
 	}
-	if validateBlock(block, difficulty) {
-//		fmt.Println("trying to validate")
+	if validateNonce(block, difficulty) { // TODO: Only nonce?
+		//		fmt.Println("trying to validate")
 		hash := block2hash(&remoteBlock)
 		if debugLocks {
 			fmt.Println("locking8")
@@ -378,19 +375,18 @@ func (m2m *MinerToMiner) ReceiveBlock(block *Block, reply *bool) (err error) {
 			fmt.Println("unlocked8")
 		}
 		if !exists {
-//			log.Printf("validated nonce = %s from block = %s", remoteBlock.Nonce, hash)
+			//			log.Printf("validated nonce = %s from block = %s", remoteBlock.Nonce, hash)
 			newBlockCH <- remoteBlock
+			foundBlockCH <- remoteBlock // reflood block
 
-//			m2m.checkValidationOps()
+			//			m2m.checkValidationOps()
 		}
 	}
-	// reflood block
-	foundBlockCH <- remoteBlock
 	return
 }
 
 func (m2m *MinerToMiner) ReceiveOp(op Operation, reply *bool) (err error) {
-	fmt.Println("OPRECEIVED:", op.SVGHash.Hash)
+//	fmt.Println("OPRECEIVED:", op.SVGHash.Hash)
 	newOpCH <- op
 	//does not have to put into tovalidate as we only keep track of our own
 	return nil
@@ -588,6 +584,7 @@ func (ink IMiner) ProcessMinedBlock(currentBlock *Block, opQueue []Operation) {
 	if debugLocks { fmt.Println("unlocking") }
 	maplock.Unlock()
 	if debugLocks { fmt.Println("unlocked") }
+	fmt.Println("MINED")
 	foundBlockCH <- *currentBlock // spit out the found block via channel
 	*currentBlock = Block{
 		PrevHash: prevHash,
@@ -626,7 +623,7 @@ func (ink IMiner) Mine() (err error) {
 			default:
 				i++
 				if i % 10000 == 0 {
-					//fmt.Println(i, currentBlock.PrevHash, block2hash(&currentBlock), len(currentBlock.Ops))
+					fmt.Println(i, currentBlock.PrevHash, block2hash(&currentBlock), len(currentBlock.Ops))
 				}
 				difficulty := ink.settings.PoWDifficultyNoOpBlock
 				if len(currentBlock.Ops) != 0 {
@@ -815,11 +812,6 @@ func getGenesisBlock() (Block) {
 }
 
 func main() {
-	go func() {
-		log.Println(http.ListenAndServe("localhost:6060", nil))
-	}()
-	runtime.SetBlockProfileRate(1)
-
 	registerGobAndCreateChannels()
 	server, err := openRPCToServer()
 	checkError(err)
@@ -845,16 +837,14 @@ func main() {
 	// Starts the flood routine that floods new blocks
 	startFloodListener()
 
+	// Starts the routine that waits for validated ops
+	startValidationListener()
+
 	// Heartbeat server
 	heartbeatTheServer()
 
 	// Start mining
 	checkError(ink.Mine())
-
-	// Feed genesisblock as the first one if no blockchain exists
-	/*if len(blocks) == 0 {
-		newBlockCH <- getGenesisBlock()
-	}*/
 
 	// Listen incoming RPC calls from artnodes
 	go listenForArtNodes()
@@ -863,13 +853,6 @@ func main() {
 	// Heartbeat your neighbours s.t. you know when you get some.
 	checkError(miner2miner.HeartbeatNeighbours())
 
-	go func() {
-		for {
-			var m2m MinerToMiner
-			m2m.checkValidationOps()
-			time.Sleep(time.Second)
-		}
-	}()
 
 	c := make(chan os.Signal, 1)
 	signal.Notify(c, os.Interrupt)
@@ -878,6 +861,16 @@ func main() {
 		clearMinerKeyFile()
 		os.Exit(0)
 	} // This is blocking. Do not add anything after this.
+}
+
+func startValidationListener() {
+	go func() {
+		for {
+			var m2m MinerToMiner
+			m2m.checkValidationOps()
+			time.Sleep(time.Second)
+		}
+	}()
 }
 
 func startFloodListener() {
@@ -1261,9 +1254,9 @@ func opIsDeleted(op Operation) bool {
 
 func validateOpSigs(op Operation, block Block) bool {
 	var ok bool
+	block = blocks[block.PrevHash]
 	for block.PrevHash != ink.settings.GenesisBlockHash {
 		for _, o := range block.Ops {
-			fmt.Println(op.SVGHash.Hash, o.SVGHash.Hash)
 			if bytes.Equal(op.SVGHash.Hash, o.SVGHash.Hash) {
 				return false
 			}
@@ -1281,6 +1274,7 @@ func validateOpDelete(op Operation, block Block) bool {
 	for block.PrevHash != ink.settings.GenesisBlockHash {
 		for _, o := range block.Ops {
 			if !o.Delete && hex.EncodeToString(o.SVGHash.Hash) == op.SVG {
+				//fmt.Println("FOUND EQUIVALENT:", hex.EncodeToString(o.SVGHash.Hash), "in", block.PrevHash)
 				return true
 			}
 		}
