@@ -390,7 +390,7 @@ func (m2m *MinerToMiner) ReceiveBlock(block *Block, reply *bool) (err error) {
 }
 
 func (m2m *MinerToMiner) ReceiveOp(op Operation, reply *bool) (err error) {
-	//fmt.Println("OPRECEIVED:", op.SVGHash.Hash)
+	fmt.Println("OPRECEIVED:", op.SVGHash.Hash)
 	newOpCH <- op
 	//does not have to put into tovalidate as we only keep track of our own
 	return nil
@@ -1200,12 +1200,13 @@ func validateOp(op Operation, block Block) bool {
 	valInk := true
 	valDelete := true
 	valIntersection := validateOpIntersection(op, block)
+	valSigs := validateOpSigs(op, block)
 	if op.Delete {
 		valDelete = validateOpDelete(op, block)
 	} else {
 		valInk = validateOpInk(op, block)
 	}
-	return valInk && valIntersection && valDelete
+	return valInk && valIntersection && valDelete && valSigs
 }
 
 func validateOpInk(op Operation, block Block) bool {
@@ -1262,6 +1263,7 @@ func validateOpSigs(op Operation, block Block) bool {
 	var ok bool
 	for block.PrevHash != ink.settings.GenesisBlockHash {
 		for _, o := range block.Ops {
+			fmt.Println(op.SVGHash.Hash, o.SVGHash.Hash)
 			if bytes.Equal(op.SVGHash.Hash, o.SVGHash.Hash) {
 				return false
 			}
@@ -1322,6 +1324,8 @@ func dumpBlockchain() {
 			if block.Ops[0].Delete {
 				opType = "DEL"
 			}
+		} else {
+			opType = ""
 		}
 		thisDump := DumpStruct { hash, block.PrevHash, level, len(block.Ops), opType}
 		toDump = append(toDump, thisDump)
