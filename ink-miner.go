@@ -761,11 +761,11 @@ var maplock sync.RWMutex
 var neighbourlock sync.RWMutex
 
 
-func listenForMinerToMinerRPC() net.Addr {
+func listenForMinerToMinerRPC(address string) net.Addr {
 	server := rpc.NewServer()
 	server.Register(&MinerToMiner{})
 
-	l, _ := net.Listen("tcp", ":0")
+	l, _ := net.Listen("tcp", address)
 
 	go func() {
 		for {
@@ -798,8 +798,8 @@ func registerGobAndCreateChannels() {
 
 }
 
-func openRPCToServer() (client *rpc.Client, err error) {
-	ipPort := flag.String("i", "127.0.0.1:12345", "RPC server ip:port")
+func openRPCToServer(serverIp string) (client *rpc.Client, err error) {
+	ipPort := flag.String("i", serverIp, "RPC server ip:port")
 	return rpc.Dial("tcp", *ipPort)
 }
 
@@ -812,8 +812,17 @@ func getGenesisBlock() (Block) {
 }
 
 func main() {
+	if len(os.Args) != 4 {
+		fmt.Println("Usage: ink-miner.go [local ip:port for miner rpc] [local ip:port for art rpc] [server ip:port]")
+		os.Exit(1)
+	}
+
+	localIpMinerRPC := os.Args[1]
+	localIpArtRPC := os.Args[2]
+	serverIp := os.Args[3]
+
 	registerGobAndCreateChannels()
-	server, err := openRPCToServer()
+	server, err := openRPCToServer(serverIp)
 	checkError(err)
 
 	priv, err := ecdsa.GenerateKey(elliptic.P384(), rand.Reader)
@@ -824,7 +833,7 @@ func main() {
 	ink = IMiner{
 		serverClient: server,
 		key:          *priv,
-		localAddr:    listenForMinerToMinerRPC(),
+		localAddr:    listenForMinerToMinerRPC(localIpMinerRPC),
 		neighbours:   make(map[string]*rpc.Client),
 	}
 
@@ -847,7 +856,7 @@ func main() {
 	checkError(ink.Mine())
 
 	// Listen incoming RPC calls from artnodes
-	go listenForArtNodes()
+	go listenForArtNodes(localIpArtRPC)
 	defer clearMinerKeyFile()
 
 	// Heartbeat your neighbours s.t. you know when you get some.
@@ -1053,14 +1062,14 @@ func (m *RMiner) GetChildren(blockHash string, blockHashes *[]string) error {
 	}
 	return nil
 }
-func listenForArtNodes() (err error) {
+func listenForArtNodes(address string) (err error) {
 	fmt.Println("Blocks:", len(blocks))
 	checkError(err)
 
 	artServer := rpc.NewServer()
 	rminer := new(RMiner)
 	artServer.Register(rminer)
-	l, err := net.Listen("tcp", ":0") // get address from global ink
+	l, err := net.Listen("tcp", address)
 
 	artNodeRPCAddr := l.Addr().String()
 	ink.artAddr = artNodeRPCAddr
