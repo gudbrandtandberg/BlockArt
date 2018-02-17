@@ -104,7 +104,6 @@ type BlockInterface interface{}
 // methods for validation, blockchain itself
 type BlockChainInterface interface {
 	ValidateBlock(BlockInterface) error
-	ValidateOps(BlockInterface) error
 }
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -166,7 +165,9 @@ func (art MinerFromANode) GetChildren(hash string, childrenHashes *[]string) (er
 }
 
 func (m2m *MinerToMiner) FloodBlockToPeers(block *Block) (err error) {
-//	fmt.Println("Sent", block.Nonce, block2hash(block))
+	if len(block.Ops) > 0 {
+		fmt.Println("Sent", block.Nonce, block2hash(block))
+	}
 //	fmt.Println(block.PrevHash, block.Nonce, block.Ops, block.MinedBy)
 	m2m.HeartbeatNeighbours()
 
@@ -347,7 +348,9 @@ func (m2m MinerToMiner) checkValidationOps() {
 }
 
 func (m2m *MinerToMiner) ReceiveBlock(block *Block, reply *bool) (err error) {
-//	fmt.Println("Received", block.Nonce, block2hash(block))
+	if len(block.Ops) > 0 {
+		fmt.Println("Received", block.Nonce, block2hash(block))
+	}
 //	fmt.Println(block.PrevHash, block.Nonce, block.Ops, block.MinedBy)
 
 	var remoteBlock Block
@@ -387,7 +390,7 @@ func (m2m *MinerToMiner) ReceiveBlock(block *Block, reply *bool) (err error) {
 }
 
 func (m2m *MinerToMiner) ReceiveOp(op Operation, reply *bool) (err error) {
-	fmt.Println("OPRECEIVED:", op.SVGHash.Hash)
+	//fmt.Println("OPRECEIVED:", op.SVGHash.Hash)
 	newOpCH <- op
 	//does not have to put into tovalidate as we only keep track of our own
 	return nil
@@ -551,19 +554,19 @@ func (ink IMiner) ProcessNewOp(op Operation, currentBlock *Block, opQueue []Oper
 	for _, o := range opQueue {
 		if bytes.Equal(op.SVGHash.Hash, o.SVGHash.Hash) {
 			exists = true
-			fmt.Println("EXISTS in queue")
+//			fmt.Println("EXISTS in queue")
 		}
 	}
 	for _, o := range currentBlock.Ops {
 		if bytes.Equal(op.SVGHash.Hash, o.SVGHash.Hash) {
 			exists = true
-			fmt.Println("EXISTS in block")
+//			fmt.Println("EXISTS in block")
 		}
 	}
 	if !exists {
 		var newOps []Operation
 		newOps = append(currentBlock.Ops, opQueue...)
-		if validateOps(append(newOps, op)) {
+		if validateOpsForBlock(append(newOps, op), *currentBlock) {
 			currentBlock.Ops = append(newOps, op)
 		} else {
 			currentBlock.Ops = newOps
@@ -623,7 +626,7 @@ func (ink IMiner) Mine() (err error) {
 			default:
 				i++
 				if i % 10000 == 0 {
-					fmt.Println(i, currentBlock.PrevHash, block2hash(&currentBlock), len(currentBlock.Ops))
+					//fmt.Println(i, currentBlock.PrevHash, block2hash(&currentBlock), len(currentBlock.Ops))
 				}
 				difficulty := ink.settings.PoWDifficultyNoOpBlock
 				if len(currentBlock.Ops) != 0 {
@@ -919,6 +922,7 @@ func (m *RMiner) ReceiveNewOp(op Operation, reply *string) error {
 	if !ecdsa.Verify(&ink.key.PublicKey, op.SVGHash.Hash, op.SVGHash.R, op.SVGHash.S) {
 		return errors.New("Invalid signature")
 	}
+
 	newOpCH <- op
 	toValidateOpsCH <- op
 
@@ -944,12 +948,12 @@ func (m *RMiner) ReceiveNewOp(op Operation, reply *string) error {
 	return nil
 }
 
-func (m *RMiner) getInkForBlock(block Block, blockHash string) uint32 {
+func (m *RMiner) getInkForBlock(publicKey ecdsa.PublicKey, block Block, blockHash string) uint32 {
 	if block.MinedBy == ink.key.PublicKey {
 		allOpsValidated := true
 		validateNum := uint8(ink.ValidationCount(blockHash))
 		for _, op := range block.Ops {
-			if validateNum < op.ValNum {
+			if ecdsa.Verify(&publicKey, op.SVGHash.Hash, op.SVGHash.R, op.SVGHash.S) && validateNum < op.ValNum {
 				allOpsValidated = false
 			}
 		}
@@ -965,18 +969,19 @@ func (m *RMiner) getInkForBlock(block Block, blockHash string) uint32 {
 	return 0
 }
 
-func (m *RMiner) useInkForBlock(block Block) uint32 {
-
+func (m *RMiner) useInkForBlock(publicKey ecdsa.PublicKey, block Block) uint32 {
 	var total uint32 = 0
 	p := blockartlib.NewSVGParser()
 	for _, op := range block.Ops {
+		if !ecdsa.Verify(&publicKey, op.SVGHash.Hash, op.SVGHash.R, op.SVGHash.S) {
+			continue
+		}
 		var err error
 		if op.Delete {
 			op, err = GetOperation(op.SVG)
 		}
 		shape, err := p.ParseXMLString(op.SVG)
 		if checkError(err) {
-			fmt.Println("cyka:", op.SVG, "-")
 			continue
 		}
 		if op.Delete {
@@ -988,10 +993,9 @@ func (m *RMiner) useInkForBlock(block Block) uint32 {
 	return total
 }
 
-func (m *RMiner) Ink(_unused string, reply *uint32) error {
+func (m *RMiner) GetInk(publicKey ecdsa.PublicKey) uint32 {
 	longestChainHash := ink.getLongestChain()
-	fmt.Println("INKINK:", longestChainHash)
-	*reply = 0
+	var inkLeft uint32 = 0
 	for longestChainHash != ink.settings.GenesisBlockHash {
 		if debugLocks { log.Println("locking18") }
 		maplock.RLock()
@@ -1001,11 +1005,16 @@ func (m *RMiner) Ink(_unused string, reply *uint32) error {
 		maplock.RUnlock()
 		if debugLocks { log.Println("unlocked18") }
 
-		*reply += m.getInkForBlock(b, longestChainHash)
-		*reply += m.useInkForBlock(b)
+		inkLeft += m.getInkForBlock(publicKey, b, longestChainHash)
+		inkLeft += m.useInkForBlock(publicKey, b)
 
 		longestChainHash = b.PrevHash
 	}
+	return inkLeft
+}
+
+func (m *RMiner) Ink(publicKey ecdsa.PublicKey, reply *uint32) error {
+	*reply = m.GetInk(publicKey)
 	return nil
 }
 
@@ -1148,10 +1157,9 @@ func block2string(block *Block) string {
 */
 func validateBlock(block *Block, difficulty uint8) bool {
 	validNonce := validateNonce(block, difficulty)
-	validOps := validateOps(block.Ops)
 	validPrevHash := validatePrevHash(block)
-	valid := (validNonce && validOps && validPrevHash)
-	return valid
+	validOps := validateOpsForBlock(block.Ops, *block)
+	return (validNonce && validOps && validPrevHash)
 }
 
 func validateNonce(block *Block, difficulty uint8) bool {
@@ -1178,147 +1186,108 @@ func validatePrevHash(block *Block) (ok bool) {
 		Check that the operation with an identical signature has not been previously added to the blockchain (prevents operation replay attacks).
 		Check that an operation that deletes a shape refers to a shape that exists and which has not been previously deleted.
 */
-func validateOps(ops []Operation) bool {
-	opSignatures := validateOpSigs(ops)
-	intersections := validateIntersections(ops)
-	identicalSignatures := validateIdenticalSigs(ops)
-	validDelete := validateDelete(ops)
-	return (opSignatures && intersections && identicalSignatures && validDelete)
-}
 
-//Returns true if all ops are correctly signed
-func validateOpSigs(ops []Operation) bool {
+func validateOpsForBlock(ops []Operation, block Block) bool {
 	for _, op := range ops {
-		if !ecdsa.Verify(&op.Owner, op.SVGHash.Hash, op.SVGHash.R, op.SVGHash.S) {
+		if !validateOp(op, block) {
 			return false
 		}
 	}
 	return true
 }
 
-//Returns true if there are -NOT- any intersections with any shapes already in blockchain
-func validateIntersections(ops []Operation) bool {
-	var toCheck []Operation
-	var theBlocks []Block
+func validateOp(op Operation, block Block) bool {
+	valInk := true
+	valDelete := true
+	valIntersection := validateOpIntersection(op, block)
+	if op.Delete {
+		valDelete = validateOpDelete(op, block)
+	} else {
+		valInk = validateOpInk(op, block)
+	}
+	return valInk && valIntersection && valDelete
+}
 
-	//for each op in block, for each block in bc, for each op in block of bc, check if xmlstring of op1 intersections with op2
-	tipOfChain := blocks[ink.getLongestChain()]
-	if tipOfChain.PrevHash == "" { // Means that there is no blockchain yet
+func validateOpInk(op Operation, block Block) bool {
+	var rm RMiner
+	inkLeft := rm.GetInk(ink.key.PublicKey)
+	p := blockartlib.NewSVGParser()
+	shape, err := p.ParseXMLString(op.SVG)
+	if checkError(err) {
 		return true
 	}
-	for tipOfChain.PrevHash != ink.settings.GenesisBlockHash {
-		for _, op := range ops {
-			for _, blOp := range tipOfChain.Ops {
-				if blockartlib.XMLStringsIntersect(op.SVG, blOp.SVG) {
-					//check if intersecting op was deleted later. if it was then it's fine if not return false
-					toCheck = append(toCheck, blOp)
-					theBlocks = append(theBlocks, tipOfChain)
-					//if same shape is added and deleted multiple times, this still works
+	return shape.Area() <= inkLeft
+}
+
+func validateOpIntersection(op Operation, block Block) bool {
+	var ok bool
+	p := blockartlib.NewSVGParser()
+	shape, _ := p.ParseXMLString(op.SVG)
+
+	for block.PrevHash != ink.settings.GenesisBlockHash {
+		for _, o := range block.Ops {
+			if !bytes.Equal(o.SVGHash.Hash, op.SVGHash.Hash) && !o.Delete {
+				testShape, _ := p.ParseXMLString(o.SVG)
+				if blockartlib.Intersects(shape, testShape) && !opIsDeleted(op) {
+					return false
 				}
-				//else if they do not intersect move on to next op in block of blockchain
 			}
 		}
-		tipOfChain = blocks[tipOfChain.PrevHash]
-	}
-
-	if len(toCheck) > 0 {
-		return checkDeletes(toCheck, theBlocks)
+		block, ok = blocks[block.PrevHash]
+		if !ok {
+			return false
+		}
 	}
 	return true
 }
 
-//Returns true if there is -NOT- an identical op/opsig in the longest chain
-func validateIdenticalSigs(ops []Operation) bool {
-	usedSigs := make(map[string]bool)
-
-	if debugLocks { fmt.Println("locking40") }
-//	maplock.RLock() // TODO: Causes a deadlock
-	if debugLocks { fmt.Println("locked40") }
+func opIsDeleted(op Operation) bool {
+	var ok bool
 	tipOfChain := blocks[ink.getLongestChain()]
-	if tipOfChain.PrevHash == "" { // Means that there is no blockchain yet
-		return true
-	}
 	for tipOfChain.PrevHash != ink.settings.GenesisBlockHash {
 		for _, o := range tipOfChain.Ops {
-			usedSigs[string(o.SVGHash.Hash)] = true
+			if o.Delete && o.SVG == string(op.SVGHash.Hash) {
+				return true
+			}
 		}
-		tipOfChain = blocks[tipOfChain.PrevHash]
-	}
-	if debugLocks { fmt.Println("locking40") }
-//	maplock.RUnlock()
-	if debugLocks { fmt.Println("locked40") }
-
-	for _, op := range ops {
-		if usedSigs[string(op.SVGHash.Hash)] {
+		tipOfChain, ok = blocks[tipOfChain.PrevHash]
+		if !ok {
 			return false
 		}
 	}
-	return true
+	return false
 }
 
-//for each op, check if it is deleted in a later block. If it is, return true
-func checkDeletes(ops []Operation, blox []Block) bool {
-	tipOfChain := blocks[ink.getLongestChain()]
-
-iLoop:
-	for i := 0; i < len(ops); i++ {
-
-		thisOp := ops[i]
-		thisBlock := blox[i]
-		currBlock := tipOfChain
-		//iterate back until thisBlock[i] is hit; if it also doesn't have delete then return false
-		for currBlock.PrevHash != thisBlock.PrevHash {
-			for _, currOp := range currBlock.Ops {
-				if currOp.Delete {
-					if bytes.Equal(currOp.SVGHash.Hash, thisOp.SVGHash.Hash) {
-						break iLoop
-					}
-				}
-			}
-			maplock.RLock()
-			currBlock = blocks[currBlock.PrevHash]
-			maplock.RUnlock()
-		}
-		finalBlock := blocks[currBlock.PrevHash]
-		for _, currOp := range finalBlock.Ops {
-			if currOp.Delete {
-				if bytes.Equal(currOp.SVGHash.Hash, thisOp.SVGHash.Hash) {
-					break iLoop
-				}
-			}
-		}
-
-		return false
-	}
-
-	return true
-
-}
-
-
-//Returns true if shape is in blockchain and not previously deleted and is a delete
-func validateDelete(ops []Operation) bool {
-	tipOfChain := blocks[ink.getLongestChain()]
-	for _, op := range ops {
-		if op.Delete {
-			//if it's a delete, handle it, if it's not a delete ignore
-			shapeHash := op.SVG
-			currBlock := tipOfChain
-		BlockSelectionLoop:
-			for currBlock.PrevHash != ink.settings.GenesisBlockHash {
-				for _, o := range currBlock.Ops {
-					if hex.EncodeToString(o.SVGHash.Hash) == shapeHash {
-						break BlockSelectionLoop
-					}
-				}
-				currBlock = blocks[currBlock.PrevHash]
-			}
-			if currBlock.PrevHash == ink.settings.GenesisBlockHash {
+func validateOpSigs(op Operation, block Block) bool {
+	var ok bool
+	for block.PrevHash != ink.settings.GenesisBlockHash {
+		for _, o := range block.Ops {
+			if bytes.Equal(op.SVGHash.Hash, o.SVGHash.Hash) {
 				return false
 			}
 		}
+		block, ok = blocks[block.PrevHash]
+		if !ok {
+			return false
+		}
 	}
 	return true
+}
+
+func validateOpDelete(op Operation, block Block) bool {
+	var ok bool
+	for block.PrevHash != ink.settings.GenesisBlockHash {
+		for _, o := range block.Ops {
+			if !o.Delete && hex.EncodeToString(o.SVGHash.Hash) == op.SVG {
+				return true
+			}
+		}
+		block, ok = blocks[block.PrevHash]
+		if !ok {
+			return false
+		}
+	}
+	return false
 }
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -1338,16 +1307,23 @@ type DumpStruct struct {
 	PrevHash string
 	Level int
 	Ops int
+	OpType string
 }
 
 //writes out block's nonce and prevhash and level
 func dumpBlockchain() {
 	var toDump []DumpStruct
 	fmt.Println("BlockChain visualizer 2000")
-	fmt.Println("in format of {[blockHash][prevHash][level][|ops|]}")
+	fmt.Println("in format of {[blockHash][prevHash][level][|ops|][op-type]}")
 	for hash, block := range blocks {
 		level := ink.LengthFromTo(hash, ink.settings.GenesisBlockHash)
-		thisDump := DumpStruct { hash, block.PrevHash, level, len(block.Ops) }
+		opType := "ADD"
+		if len(block.Ops) > 0 {
+			if block.Ops[0].Delete {
+				opType = "DEL"
+			}
+		}
+		thisDump := DumpStruct { hash, block.PrevHash, level, len(block.Ops), opType}
 		toDump = append(toDump, thisDump)
 		//fmt.Printf("{[%v][%v][%v]}\n", hash, block.PrevHash, level)
 	}
@@ -1355,6 +1331,6 @@ func dumpBlockchain() {
 	sort.Slice(toDump, func(i, j int) bool { return toDump[i].Level < toDump[j].Level })
 
 	for _, ds := range toDump {
-		fmt.Printf("{[%v][%v][%v][%v]}\n", ds.Hash, ds.PrevHash, ds.Level, ds.Ops)
+		fmt.Printf("{[%v][%v][%v][%v][%v]}\n", ds.Hash, ds.PrevHash, ds.Level, ds.Ops, ds.OpType)
 	}
 }

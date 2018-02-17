@@ -252,6 +252,15 @@ func (c BACanvas) AddShape(validateNum uint8, shapeType ShapeType, shapeSvgStrin
 	}
 	shapeHash = hex.EncodeToString(op.SVGHash.Hash)
 
+	inkRemaining, err = c.GetInk()
+	if err != nil {
+		return
+	}
+	if inkRemaining < shape.Area() {
+		err = InsufficientInkError(inkRemaining)
+		return
+	}
+
 	err = minerClient.Call("RMiner.ReceiveNewOp", op, nil)
 	if err != nil {
 		return
@@ -274,7 +283,7 @@ func (c BACanvas) GetSvgString(shapeHash string) (svgString string, err error) {
 // Can return the following errors:
 // - DisconnectedError
 func (c BACanvas) GetInk() (inkRemaining uint32, err error) {
-	err = minerClient.Call("RMiner.Ink", "", &inkRemaining)
+	err = minerClient.Call("RMiner.Ink", c.privKey.PublicKey, &inkRemaining)
 	return
 }
 
