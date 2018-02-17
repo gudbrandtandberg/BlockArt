@@ -111,7 +111,8 @@ function submitDrawRequest() {
      post(request)
 }
 function post(shape) {
-    fetch("http://localhost:8080/drawShapes",
+    var uri = "http://" + window.location.hostname + ":8080/draw"
+    fetch(uri,
             {method: "POST",
             body: JSON.stringify(shape)}
         ).then(function(res){ res.text().then(function(data){
@@ -175,10 +176,9 @@ function getBlockChain() {
 
         var root = d3.stratify()(flattened);
         //console.log(root);
-        var tree = d3.tree();
-        tree.size([1000, 1000]);
-        //tree(root);
-        // console.log(tree)
+        // var tree = d3.tree();
+        // tree.size([1000, 1000]);
+        // tree(root);
 
         // TODO: make this work
     });
@@ -193,29 +193,18 @@ function getShapes() {
             var command = data[c];
             command = command.replace('<svg>', '<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024">');
             console.log(command);
-            drawShapes(command);
+            renderShapes(command);
         }
     });
 }
 
-function drawShapes(command) {
+function renderShapes(command) {
     var canvas = document.getElementById("canvas")
     var ctx = canvas.getContext("2d")
-    var data = '<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024">' +
-        // '<foreignObject width="100%" height="100%">' +
-        // '<div xmlns="http://www.w3.org/1999/xhtml" style="font-size:40px">' +
-        // '<em>I</em> like ' +
-        // '<span style="color:white; text-shadow:0 0 2px blue;">' +
-        // 'cheese</span>' +
-        // '</div>' +
-        //'<path d="M 0 0 L 0 5" fill="transparent" stroke="red"/>' +
-        '<path d="M10 10 H 90 V 90 H 10 L 10 10"/>' +
-        // '</foreignObject>' +
-        '</svg>';
 
-    data = command;
+    var data = command;
     //data = encodeURIComponent('<path d="M10 10 H 90 V 90 H 10 L 10 10"/>');
-    console.log(data);
+    //console.log(data);
 
 
     var img = new Image();
