@@ -152,9 +152,13 @@ func main() {
 	validateNum := uint8(2)
 
 	// Add a line.
-	shapeHash, _, _, err := canvas.AddShape(validateNum, blockartlib.PATH, "M 10 10 L 50 50 L 100 100 L 150 200", "transparent", "red")
-	if checkError(err) != nil {
-		return
+	var shapeHash string
+	for {
+		shapeHash, _, _, err = canvas.AddShape(validateNum, blockartlib.PATH, "M 10 10 L 50 50 L 100 100 L 150 200", "transparent", "red")
+		if checkError(err) == nil {
+			break
+		}
+		time.Sleep(time.Second)
 	}
 
 	// Read the shapeHash
@@ -188,9 +192,32 @@ func main() {
 	// Delete a shape
 
 	fmt.Println("Will delete", shapeHash)
-	_, err = canvas.DeleteShape(validateNum, shapeHash)
+	//_, err = canvas.DeleteShape(validateNum, shapeHash)
 	if checkError(err) != nil {
 		return
+	}
+
+	for {
+		_, _, _, err = canvas.AddShape(validateNum, blockartlib.CIRCLE, "400,400,8", "blue", "black")
+		if checkError(err) == nil {
+			break
+		}
+		time.Sleep(time.Second)
+	}
+
+	for {
+		_, _, _, err = canvas.AddShape(validateNum, blockartlib.CIRCLE, "800,800,50", "transparent", "black")
+		if checkError(err) == nil {
+			break
+		}
+		time.Sleep(time.Second)
+	}
+	for {
+		_, _, _, err = canvas.AddShape(validateNum, blockartlib.CIRCLE, "120,800,100", "transparent", "red")
+		if checkError(err) == nil {
+			break
+		}
+		time.Sleep(time.Second)
 	}
 
 	blocks, last := getBlockChain(canvas)

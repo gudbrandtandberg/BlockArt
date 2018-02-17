@@ -626,7 +626,7 @@ func (ink IMiner) Mine() (err error) {
 					fmt.Println(i, currentBlock.PrevHash, block2hash(&currentBlock), len(currentBlock.Ops))
 				}
 				if len(currentBlock.Ops) == 0 {
-					time.Sleep(time.Microsecond * 10)
+					//time.Sleep(time.Microsecond * 10)
 				}
 				difficulty := ink.settings.PoWDifficultyNoOpBlock
 				if len(currentBlock.Ops) != 0 {
