@@ -20,6 +20,7 @@ import (
 	"./blockartlib"
 	"strings"
 	"net"
+	"os"
 )
 
 // WebServer version of the func in art-app.go
@@ -322,10 +323,16 @@ var settings blockartlib.CanvasSettings
 
 // serve main webpage and listen for / issue new drawing commands to the canvas
 func main() {
+	if len(os.Args) != 2 {
+		fmt.Println("Usage: webserver.go [miner ip:port]")
+		os.Exit(1)
+	}
+	var err error
+	minerAddr := os.Args[1]
 	//newBlockCh := make(chan []byte)
 	//go listenForNewBlocks(newBlockCh)
 	//go broadcastNewBlocks(newBlockCh)
-	addr, keystring, err := readMinerAddrKeyWS()
+	_, keystring, err := readMinerAddrKeyWS()
 	if err != nil {
 		log.Println("failed read")
 	}
@@ -333,7 +340,8 @@ func main() {
 	if err != nil {
 		log.Println("failed decode")
 	}
-	canvas, settings, err = blockartlib.OpenCanvas(":"+addr, *key)
+
+	canvas, settings, err = blockartlib.OpenCanvas(minerAddr, *key)
 	if err != nil {
 		log.Println("failed opencanvas")
 	}

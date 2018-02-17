@@ -57,7 +57,7 @@ func decodeKey(hexStr string) (key *ecdsa.PrivateKey, err error) {
 	return x509.ParseECPrivateKey(keyBytes)
 }
 
-func readMinerAddrKey() (minerAddr string, key *ecdsa.PrivateKey, err error) {
+func readMinerAddrKey(addr string) (minerAddr string, key *ecdsa.PrivateKey, err error) {
 	infos, err := ioutil.ReadDir("keys")
 	if err != nil {
 		return
@@ -73,7 +73,7 @@ func readMinerAddrKey() (minerAddr string, key *ecdsa.PrivateKey, err error) {
 			break
 		}
 	}
-	ip, err := net.ResolveTCPAddr("tcp", "localhost:"+port)
+	ip, err := net.ResolveTCPAddr("tcp", addr)
 	minerAddr = ip.String()
 	keyBytes, err := ioutil.ReadFile("./keys/" + port)
 	if err != nil {
@@ -130,6 +130,12 @@ func findLongestChain(canvas blockartlib.BACanvas, blocks map[string][]string, s
 }
 
 func main() {
+	if len(os.Args) != 2 {
+		fmt.Println("Usage: art-app.go [miner ip:port]")
+		os.Exit(1)
+	}
+	var err error
+	addr := os.Args[1]
 
 	// testParser()
 	// return
@@ -137,7 +143,7 @@ func main() {
 	// curve := elliptic.P384()
 	// privKey, err := ecdsa.GenerateKey(curve, rand.Reader)
 
-	minerAddr, privKey, err := readMinerAddrKey()
+	minerAddr, privKey, err := readMinerAddrKey(addr)
 	if checkError(err) != nil {
 		return
 	}
