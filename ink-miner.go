@@ -41,6 +41,7 @@ import (
 import _ "net/http/pprof"
 
 const debugLocks = false
+const logGetNodes = false
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////
 //											START OF INTERFACES												 //
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -164,7 +165,7 @@ func (art MinerFromANode) GetChildren(hash string, childrenHashes *[]string) (er
 
 func (m2m *MinerToMiner) FloodBlockToPeers(block *Block) (err error) {
 	if len(block.Ops) > 0 {
-		fmt.Println("Sent", block.Nonce, block2hash(block))
+		fmt.Println("Sent block with nonce:", block.Nonce, "ops:", len(block.Ops))
 	}
 //	fmt.Println(block.PrevHash, block.Nonce, block.Ops, block.MinedBy)
 	m2m.HeartbeatNeighbours()
@@ -320,7 +321,7 @@ func (m2m MinerToMiner) checkValidationOps() {
 		}
 		opToCheck := <-toValidateOpsCH
 
-		//fmt.Println("TESTING:", opToCheck.SVG, validationMap)
+		fmt.Println("TESTING:", opToCheck.SVG)
 		valCount, ok := validationMap[string(opToCheck.SVGHash.Hash)]
 		length := lengthMap[string(opToCheck.SVGHash.Hash)]
 
@@ -347,7 +348,7 @@ func (m2m MinerToMiner) checkValidationOps() {
 
 func (m2m *MinerToMiner) ReceiveBlock(block *Block, reply *bool) (err error) {
 	if len(block.Ops) > 0 {
-		fmt.Println("Received", block.Nonce, block2hash(block))
+		fmt.Println("Received block with nonce:", block.Nonce, "ops:", len(block.Ops))
 	}
 //	fmt.Println(block.PrevHash, block.Nonce, block.Ops, block.MinedBy)
 	var remoteBlock Block
@@ -375,18 +376,18 @@ func (m2m *MinerToMiner) ReceiveBlock(block *Block, reply *bool) (err error) {
 			fmt.Println("unlocked8")
 		}
 		if !exists {
-			//			log.Printf("validated nonce = %s from block = %s", remoteBlock.Nonce, hash)
+			log.Printf("Validated nonce = %s from block = %s", remoteBlock.Nonce, hash)
 			newBlockCH <- remoteBlock
 			foundBlockCH <- remoteBlock // reflood block
 
-			//			m2m.checkValidationOps()
+			m2m.checkValidationOps()
 		}
 	}
 	return
 }
 
 func (m2m *MinerToMiner) ReceiveOp(op Operation, reply *bool) (err error) {
-//	fmt.Println("OPRECEIVED:", op.SVGHash.Hash)
+	fmt.Println("Received operation from neighbour:", op.SVGHash.Hash)
 	newOpCH <- op
 	//does not have to put into tovalidate as we only keep track of our own
 	return nil
@@ -458,14 +459,14 @@ func (m2s *MinerToServer) GetNodes() (err error) {
 
 	minerAddresses := make([]net.Addr, 0)
 	err = ink.serverClient.Call("RServer.GetNodes", ink.key.PublicKey, &minerAddresses)
-	fmt.Println("mineraddrs: ", minerAddresses)
+	if logGetNodes { fmt.Println("GetNodes: ", minerAddresses) }
 	for _, addr := range minerAddresses {
 		_, ok := ink.neighbours[addr.String()]
 		if !ok {
 			client, err := rpc.Dial("tcp", addr.String())
 			if err == nil {
 				ink.neighbours[addr.String()] = client
-				fmt.Println("added neighbour")
+				fmt.Println("Added neighbour", addr.String())
 			} else {
 				fmt.Println(err)
 			}
@@ -564,11 +565,11 @@ func (ink IMiner) ProcessNewOp(op Operation, currentBlock *Block, opQueue []Oper
 		newOps = append(currentBlock.Ops, opQueue...)
 		if validateOpsForBlock(append(newOps, op), *currentBlock) {
 			currentBlock.Ops = append(newOps, op)
+			var m2m MinerToMiner
+			m2m.FloodOpToPeers(op)
 		} else {
 			currentBlock.Ops = newOps
 		}
-		var m2m MinerToMiner
-		m2m.FloodOpToPeers(op)
 	}
 
 	//This is how the miner actually handles the new op when it is handed it through a channel by an RPC call from art node OR a flood from neighbour
@@ -576,7 +577,6 @@ func (ink IMiner) ProcessNewOp(op Operation, currentBlock *Block, opQueue []Oper
 
 func (ink IMiner) ProcessMinedBlock(currentBlock *Block, opQueue []Operation) {
 	prevHash := block2hash(currentBlock)
-	//log.Printf("found nonce = %s with hash = %s", currentBlock.Nonce, prevHash)
     if debugLocks { fmt.Println("locking") }
 	maplock.Lock()
     if debugLocks { fmt.Println("locked") }
@@ -584,15 +584,15 @@ func (ink IMiner) ProcessMinedBlock(currentBlock *Block, opQueue []Operation) {
 	if debugLocks { fmt.Println("unlocking") }
 	maplock.Unlock()
 	if debugLocks { fmt.Println("unlocked") }
-	fmt.Println("MINED")
+	//fmt.Println("MINED")
 	foundBlockCH <- *currentBlock // spit out the found block via channel
 	*currentBlock = Block{
 		PrevHash: prevHash,
 		MinedBy:  ink.key.PublicKey,
 		Ops:      opQueue,
 	}
-//	var m2m MinerToMiner
-//	m2m.checkValidationOps()
+	var m2m MinerToMiner
+	m2m.checkValidationOps()
 }
 
 func (ink IMiner) Mine() (err error) {
@@ -622,7 +622,7 @@ func (ink IMiner) Mine() (err error) {
 
 			default:
 				i++
-				if i % 10000 == 0 {
+				if i % 500 == 0  && len(currentBlock.Ops) > 0{
 					fmt.Println(i, currentBlock.PrevHash, block2hash(&currentBlock), len(currentBlock.Ops))
 				}
 				difficulty := ink.settings.PoWDifficultyNoOpBlock
@@ -868,7 +868,7 @@ func startValidationListener() {
 		for {
 			var m2m MinerToMiner
 			m2m.checkValidationOps()
-			time.Sleep(time.Second)
+			time.Sleep(time.Millisecond * 100)
 		}
 	}()
 }
@@ -919,6 +919,8 @@ func (m *RMiner) ReceiveNewOp(op Operation, reply *string) error {
 	newOpCH <- op
 	toValidateOpsCH <- op
 
+	fmt.Println("Received op:", op.SVG, "Ops to be validated:", len(toValidateOpsCH))
+
 	for {
 		select {
 		case validatedOp := <- validatedOpsCH:
@@ -929,7 +931,7 @@ func (m *RMiner) ReceiveNewOp(op Operation, reply *string) error {
 			}
 		case neverValidatedOp := <- neverValidatedOpsCH:
 			if bytes.Equal(neverValidatedOp.SVGHash.Hash, op.SVGHash.Hash) {
-				fmt.Println("READDDED OP")
+				fmt.Println("Re-added op")
 				newOpCH <- op
 				toValidateOpsCH <- op
 			} else {
