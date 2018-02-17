@@ -488,7 +488,6 @@ func Intersects(shape1, shape2 Shape) bool {
 		return pathIntersectsCircle(p2, c1)
 	}
 
-	fmt.Println("Hit bottom")
 	return false
 }
 

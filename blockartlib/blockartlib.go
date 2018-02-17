@@ -243,12 +243,23 @@ func (c BACanvas) AddShape(validateNum uint8, shapeType ShapeType, shapeSvgStrin
 	}
 
 	// local checks done, send op to miner
-	var op Operation
-	op.Delete = false
-	op.Owner = c.privKey.PublicKey
-	op.SVG = shape.XMLString()
-	op.SVGHash = signShapeString(op.SVG, &c.privKey)
+	op := Operation{
+		Delete: false,
+		Owner: c.privKey.PublicKey,
+		SVG: shape.XMLString(),
+		SVGHash: signShapeString(shape.XMLString(), &c.privKey),
+		ValNum: validateNum,
+	}
 	shapeHash = hex.EncodeToString(op.SVGHash.Hash)
+
+	inkRemaining, err = c.GetInk()
+	if err != nil {
+		return
+	}
+	if inkRemaining < shape.Area() {
+		err = InsufficientInkError(inkRemaining)
+		return
+	}
 
 	err = minerClient.Call("RMiner.ReceiveNewOp", op, nil)
 	if err != nil {
@@ -272,7 +283,7 @@ func (c BACanvas) GetSvgString(shapeHash string) (svgString string, err error) {
 // Can return the following errors:
 // - DisconnectedError
 func (c BACanvas) GetInk() (inkRemaining uint32, err error) {
-	err = minerClient.Call("RMiner.Ink", "", &inkRemaining)
+	err = minerClient.Call("RMiner.Ink", c.privKey.PublicKey, &inkRemaining)
 	return
 }
 
