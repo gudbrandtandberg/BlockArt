@@ -192,7 +192,7 @@ func main() {
 
 	// Delete a shape
 
-	fmt.Println("Will delete", shapeHash)
+	//fmt.Println("Will delete", shapeHash)
 	//_, err = canvas.DeleteShape(validateNum, shapeHash)
 	if checkError(err) != nil {
 		return
